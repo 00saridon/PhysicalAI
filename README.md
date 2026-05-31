@@ -155,18 +155,39 @@ python run.py export
 
 ### 웹 대시보드 실행
 
-터미널 두 개를 사용합니다.
+터미널 두 개를 사용합니다. (명령은 모두 저장소 루트에서 실행)
 
 ```bash
-# 터미널 1 — 백엔드 API
-python -m uvicorn api.main:app --port 8001
+# 터미널 1 — 백엔드 API (mock 모드, 기본값)
+npm run backend
 
 # 터미널 2 — 프론트엔드 개발 서버
-cd dashboard
 npm run dev
 ```
 
-브라우저에서 `http://localhost:5173` 접속.
+브라우저에서 `http://localhost:5173` 접속. 백엔드는 `:8000`, Vite가 `/api/*`를
+`:8000`으로 프록시합니다.
+
+#### Mock 모드 vs 실제 실행
+
+파이프라인 스테이지(ENV·COLLECT·IL·RL·EXPORT) 버튼은 백엔드 모드에 따라 다르게 동작합니다.
+
+| 명령 | 모드 | 동작 | 필요 패키지 |
+|------|------|------|-------------|
+| `npm run backend` | **mock** (기본) | 실제같은 로그·메트릭(IL loss, RL reward 곡선)을 스트리밍. 서브프로세스 미실행 | 없음 |
+| `npm run backend:real` | 실제 | `python run.py <stage>`를 실제로 실행해 산출물(demos/·checkpoints/·outputs/) 생성 | `requirements.txt` |
+
+- 평소 대시보드 UI/차트 확인은 mock으로 충분합니다.
+- 실제 학습/데이터 생성이 필요할 때만 실제 모드를 씁니다. 먼저 의존성을 설치하세요:
+
+  ```bash
+  npm run install:pipeline   # = pip install -r requirements.txt (torch 등)
+  npm run backend:real
+  ```
+
+  실제 모드에서 IL·RL·EXPORT는 선행 산출물이 있어야 하므로
+  **ENV → COLLECT → IL → RL → EXPORT** 순서로 실행합니다. `configs/env.yaml`의
+  `mock_mode: true` 덕분에 Isaac Sim 없이도 numpy 기반으로 동작합니다.
 
 ---
 

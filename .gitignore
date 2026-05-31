@@ -8,6 +8,7 @@ __pycache__/
 *.pyo
 *.egg-info/
 .env
+node_modules/
 dashboard/node_modules/
 dashboard/dist/
 

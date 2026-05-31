@@ -8,6 +8,11 @@
     "build": "npm --prefix dashboard run build",
     "test": "npm --prefix dashboard run test",
     "install:dashboard": "npm --prefix dashboard install",
-    "backend": "python -m uvicorn api.main:app --reload --port 8000"
+    "install:pipeline": "pip install -r requirements.txt",
+    "backend": "cross-env MOCK_PIPELINE=true python -m uvicorn api.main:app --reload --port 8000",
+    "backend:real": "cross-env MOCK_PIPELINE=false python -m uvicorn api.main:app --reload --port 8000"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3"
   }
 }
