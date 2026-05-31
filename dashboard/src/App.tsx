@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Sidebar } from './components/layout/Sidebar'
 import { TopBar } from './components/layout/TopBar'
 import { Overview } from './pages/Overview'
@@ -30,6 +30,17 @@ export default function App() {
   const { data: mode } = usePipelineMode()
   const { mutate: setMode, isPending: modePending } = useSetMode()
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  // On first load / refresh, always land on the Overview hero (top), not wherever
+  // the browser tries to restore the inner scroll container to.
+  useEffect(() => {
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
+    setPage('Overview')
+    const el = scrollRef.current
+    el?.scrollTo({ top: 0 })
+    // guard against the browser restoring the container's scroll a frame later
+    requestAnimationFrame(() => el?.scrollTo({ top: 0 }))
+  }, [])
 
   const handleNav = (p: NavPage) => {
     setPage(p)
