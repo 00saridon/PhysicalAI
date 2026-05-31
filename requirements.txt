@@ -1,0 +1,10 @@
+# Python >= 3.10 required
+torch>=2.1.0
+numpy>=1.24.0
+h5py>=3.9.0
+gymnasium>=0.29.0
+stable-baselines3>=2.2.0
+onnx>=1.15.0
+onnxruntime>=1.16.0
+pyyaml>=6.0
+ovrtx>=0.3.0

@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(superpowers:writing-plans)",
+      "Skill(superpowers:writing-plans:*)",
+      "PowerShell(New-Item -ItemType Directory -Force \"C:\\\\Users\\\\ASUS\\\\OneDrive\\\\Desktop\\\\PhysicalAI\\\\docs\\\\superpowers\\\\plans\")",
+      "Skill(superpowers:subagent-driven-development)",
+      "Skill(superpowers:subagent-driven-development:*)",
+      "PowerShell(cd \"C:\\\\Users\\\\ASUS\\\\OneDrive\\\\Desktop\\\\PhysicalAI\" ; Get-ChildItem -Recurse -File | Where-Object { $_.Name -match \"\\(\\\\.yaml|requirements\\\\.txt|\\\\.gitignore|__init__\\)\" } | Select-Object FullName | Sort-Object FullName)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(Get-ChildItem -Recurse -Force)",
+      "Bash(Select-Object FullName)",
+      "Bash(git ls-tree *)",
+      "Bash(Get-ChildItem -Force)",
+      "Bash(python -m pytest tests/test_env.py -v)",
+      "Bash(python -m pytest tests/test_collector.py -v)",
+      "Bash(python.exe -m pytest tests/test_collector.py -v)",
+      "Bash(python -c \"import os; [print\\(f\\) for root, dirs, files in os.walk\\('.'\\) for f in files if 'dataset' in f or 'test_collector' in f]\")",
+      "Bash(python -m pytest tests/test_collector.py::test_keyboard_teleop_action_shape tests/test_collector.py::test_rollout_collector_runs -v)",
+      "Bash(where python *)",
+      "Bash(python -m pytest tests/test_il_trainer.py -v)",
+      "Bash(dir)",
+      "Bash(python.exe -m pytest tests/test_il_trainer.py -v)",
+      "Bash(Get-ChildItem \"C:\\\\Users\\\\ASUS\\\\OneDrive\\\\Desktop\\\\PhysicalAI\")",
+      "Bash(Select-Object Name)",
+      "Skill(superpowers:finishing-a-development-branch)",
+      "Skill(superpowers:finishing-a-development-branch:*)",
+      "PowerShell([System.IO.Directory]::GetDirectories\\(\"C:\\\\Users\\\\ASUS\\\\.claude\\\\projects\\\\\"\\))"
+    ]
+  }
+}

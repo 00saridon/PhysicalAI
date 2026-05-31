@@ -1,0 +1,19 @@
+demos/
+checkpoints/
+outputs/
+.superpowers/
+.playwright-mcp/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.env
+dashboard/node_modules/
+dashboard/dist/
+
+# dev utilities
+demo_screenshot.py
+demo_shots/
+dump_dom.py
+make_preview.py
+readme_preview.html

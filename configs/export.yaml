@@ -1,0 +1,8 @@
+rl_checkpoint: checkpoints/rl/best  # SB3 saves as .zip, load without extension
+output_dir: outputs/
+policy:
+  format: onnx
+  filename: policy.onnx
+dataset:
+  render_rollouts: 50
+  filename: synthetic_v1.hdf5

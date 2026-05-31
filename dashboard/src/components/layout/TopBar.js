@@ -1,0 +1,7 @@
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { clsx } from 'clsx';
+export function TopBar({ page, onMenuToggle, onNavHome, onNewRun, running, mockMode }) {
+    return (_jsxs("header", { className: "h-12 flex-shrink-0 bg-panel border-b border-border flex items-center px-4 gap-3", children: [_jsx("button", { onClick: onMenuToggle, className: "lg:hidden text-slate-400 hover:text-slate-200 text-xl leading-none flex-shrink-0", children: "\u2630" }), _jsxs("div", { className: "flex items-center gap-1.5 text-xs text-muted", children: [_jsx("button", { onClick: onNavHome, className: "hidden sm:inline hover:text-slate-200 transition-colors cursor-pointer", children: "PhysicalAI" }), _jsx("span", { className: "hidden sm:inline text-border", children: "/" }), _jsx("span", { className: "text-slate-300 font-semibold", children: page })] }), _jsx("div", { className: "flex-1" }), mockMode && (_jsx("span", { className: "hidden sm:inline text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-900 text-emerald-400", children: "mock_mode" })), _jsx("button", { onClick: onNewRun, disabled: running, className: clsx('text-xs font-semibold px-3 py-1.5 rounded-md transition-colors whitespace-nowrap', running
+                    ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                    : 'bg-indigo-600 hover:bg-indigo-500 text-white'), children: running ? '⟳ Running...' : '▶ New Run' })] }));
+}

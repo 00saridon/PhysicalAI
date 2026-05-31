@@ -1,0 +1,5 @@
+mode: teleop
+episodes: 100
+max_steps_per_episode: 500
+save_dir: demos/
+checkpoint_path: ""

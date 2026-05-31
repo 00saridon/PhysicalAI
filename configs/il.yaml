@@ -1,0 +1,7 @@
+demo_dir: demos/
+checkpoint_dir: checkpoints/il/
+batch_size: 64
+lr: 1.0e-4
+epochs: 100
+hidden_dim: 256
+save_every: 10

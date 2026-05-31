@@ -1,0 +1,22 @@
+[build]
+  base    = "OneDrive/Desktop/PhysicalAI/dashboard"
+  command = "npm run build"
+  publish = "OneDrive/Desktop/PhysicalAI/dashboard/dist"
+
+[build.environment]
+  NODE_VERSION = "18"
+  VITE_API_URL = "https://physicalai-production.up.railway.app"
+
+# /api/* → Railway 백엔드로 프록시
+# 배포 후 RAILWAY_BACKEND_URL 환경변수를 Netlify 대시보드에서 설정
+[[redirects]]
+  from   = "/api/*"
+  to     = "https://physicalai-production.up.railway.app/api/:splat"
+  status = 200
+  force  = true
+
+# SPA fallback — React Router 새로고침 대응
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200

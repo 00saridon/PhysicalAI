@@ -1,0 +1,280 @@
+# PhysicalAI — Robot Learning Pipeline
+
+> NVIDIA Isaac Sim 기반 로봇 학습 파이프라인.  
+> 모방 학습(IL) → 강화 학습(RL) → ONNX 배포까지 전 과정을 **단일 CLI와 웹 대시보드**로 운영합니다.
+
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python)
+![Node](https://img.shields.io/badge/Node.js-18%2B-green?logo=node.js)
+![License](https://img.shields.io/badge/License-MIT-yellow)
+![Status](https://img.shields.io/badge/Status-In%20Development-orange)
+![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/00saridon/PhysicalAI/blob/main/notebooks/ovrtx_minimal_colab.ipynb)
+
+---
+
+## Features
+
+- **물리 기반 시뮬레이션** — NVIDIA Isaac Sim 환경에서 RGB·Depth·Joint State·EE Pose 센서를 실제 물리 법칙으로 구동
+- **Full-pipeline 자동화** — 데모 수집 → IL → RL → ONNX 내보내기를 단일 CLI(`run.py`) 또는 대시보드 버튼 하나로 실행
+- **다중 수집 모드** — Random / Teleoperation(키보드) / Policy Rollout 세 가지 데모 수집 방식 지원
+- **실시간 모니터링** — SSE(Server-Sent Events) 기반 라이브 로그·RL Reward·IL Loss 스트리밍
+- **ONNX 배포 준비** — 학습된 정책을 ONNX로 내보내 edge 디바이스·실제 로봇에 바로 배포 가능
+- **mock_mode 지원** — Isaac Sim 없이 로컬에서 전체 파이프라인 테스트 가능 (`configs/env.yaml: mock_mode: true`)
+
+---
+
+## 프로젝트 상태
+
+> **현재 활발히 개발 중입니다.**  
+> Isaac Sim 연동 없이도 `mock_mode: true`로 전체 파이프라인과 대시보드를 로컬에서 테스트할 수 있습니다.
+
+| 컴포넌트 | 상태 |
+|---|---|
+| CLI 파이프라인 (`run.py`) | ✅ 동작 |
+| FastAPI 백엔드 | ✅ 동작 |
+| React 대시보드 | ✅ 동작 |
+| Isaac Sim 실환경 연동 | 🔧 개발 중 |
+| 멀티 로봇 지원 | 🔧 개발 중 |
+
+---
+
+## 아키텍처
+
+```
+┌─────────────┐   demo HDF5   ┌─────────────┐   best.pt     ┌──────────────┐
+│  ENV (Isaac) │ ──────────▶  │  IL Trainer │ ──────────▶   │  RL Trainer  │
+│  + Sensors   │              │  (BC / MLP)  │               │ (PPO / SAC)  │
+└─────────────┘               └─────────────┘               └──────┬───────┘
+      ▲  collect                                                    │ best.zip
+      │  teleop / random                                            ▼
+      └─────────────────────────────────────────────────── Export (ONNX + HDF5)
+```
+
+| 스테이지 | 설명 | 출력 |
+|---|---|---|
+| **env** | Isaac 환경 초기화, 센서 설정 검증 | — |
+| **collect** | 랜덤·텔레오퍼레이션·롤아웃으로 데모 수집 | `demos/*.hdf5` |
+| **il** | Behavioral Cloning으로 초기 정책 학습 | `checkpoints/il/best.pt` |
+| **rl** | PPO / SAC로 정책 파인튜닝 | `checkpoints/rl/best.zip` |
+| **export** | ONNX 정책 + 합성 데이터셋 내보내기 | `outputs/policy/policy.onnx`, `outputs/dataset/*.hdf5` |
+
+---
+
+## 디렉터리 구조
+
+```
+PhysicalAI/
+├── run.py                  # CLI 엔트리포인트
+├── configs/                # YAML 설정 파일
+│   ├── env.yaml
+│   ├── collector.yaml
+│   ├── il.yaml
+│   ├── rl.yaml
+│   └── export.yaml
+├── env/                    # Isaac 환경 래퍼
+│   ├── isaac_env.py
+│   ├── flat_obs_env.py
+│   ├── robot_loader.py
+│   ├── sensor.py
+│   └── task_registry.py
+├── collector/              # 데모 수집
+│   ├── dataset.py
+│   ├── teleop.py
+│   └── rollout.py
+├── trainer/
+│   ├── il/                 # Behavioral Cloning
+│   │   ├── bc_trainer.py
+│   │   ├── policy.py
+│   │   └── dataloader.py
+│   └── rl/                 # PPO / SAC (Stable-Baselines3)
+│       ├── ppo_trainer.py
+│       ├── sac_trainer.py
+│       └── reward_shaper.py
+├── export/                 # ONNX + HDF5 내보내기
+│   ├── policy_exporter.py
+│   └── dataset_builder.py
+├── api/                    # FastAPI 백엔드
+│   ├── main.py
+│   ├── event_bus.py
+│   ├── subprocess_runner.py
+│   └── routes/
+│       ├── pipeline.py     # POST /api/run/{stage}
+│       ├── logs.py         # GET /api/logs/stream (SSE)
+│       └── artifacts.py    # GET /api/artifacts, /api/demos, /api/config
+├── dashboard/              # React 대시보드 (Vite + Tailwind)
+│   └── src/
+│       ├── App.tsx
+│       ├── pages/          # Overview · Run · Training · Demos · Artifacts · Config
+│       ├── components/
+│       ├── hooks/
+│       └── api/
+└── tests/                  # pytest 단위 테스트
+```
+
+---
+
+## 빠른 시작
+
+### 요구사항
+
+- Python 3.10+
+- Node.js 18+
+- NVIDIA Isaac Sim (환경 스테이지 실행 시 필요, `mock_mode: true`로 로컬 테스트 가능)
+
+### 설치
+
+```bash
+git clone https://github.com/00saridon/PhysicalAI.git
+cd PhysicalAI
+
+# Python 의존성
+pip install fastapi uvicorn sse-starlette stable-baselines3 torch onnx h5py pyyaml
+
+# 대시보드 의존성
+cd dashboard && npm install && cd ..
+```
+
+### CLI 실행
+
+```bash
+# 환경 검증 (mock_mode)
+python run.py env --validate
+
+# 데모 수집 (랜덤 10 에피소드)
+python run.py collect --mode random --episodes 10
+
+# 모방 학습
+python run.py il
+
+# 강화 학습
+python run.py rl
+
+# ONNX 내보내기
+python run.py export
+```
+
+### 웹 대시보드 실행
+
+터미널 두 개를 사용합니다.
+
+```bash
+# 터미널 1 — 백엔드 API
+python -m uvicorn api.main:app --port 8001
+
+# 터미널 2 — 프론트엔드 개발 서버
+cd dashboard
+npm run dev
+```
+
+브라우저에서 `http://localhost:5173` 접속.
+
+---
+
+## 대시보드 페이지
+
+| 메뉴 | 기능 |
+|---|---|
+| **Overview** | KPI 카드 · Pipeline Stages · Training Metrics · Live Log · Artifacts |
+| **Run** | 스테이지별 실행 버튼 · 상태 배너 · 실시간 로그 |
+| **Training** | RL Reward / IL Loss 차트 · 학습 지표 KPI |
+| **Demos** | 수집된 HDF5 에피소드 목록 · Collect 실행 |
+| **Artifacts** | 타입별 필터 (ONNX / HDF5 / PT / ZIP) · 다운로드 |
+| **Config** | `configs/*.yaml` 읽기 전용 뷰어 |
+
+---
+
+## 설정 파일
+
+### `configs/env.yaml`
+
+```yaml
+mock_mode: true          # Isaac Sim 없이 로컬 테스트
+robot:
+  num_joints: 7
+  has_mobile_base: true
+sensor:
+  rgb:  { enabled: true, width: 224, height: 224 }
+  depth: { enabled: true, width: 224, height: 224 }
+```
+
+### `configs/rl.yaml`
+
+```yaml
+algorithm: ppo           # ppo | sac
+total_timesteps: 50000
+learning_rate: 3.0e-4
+gamma: 0.99
+```
+
+### `configs/il.yaml`
+
+```yaml
+epochs: 100
+batch_size: 64
+lr: 1.0e-4
+hidden_dim: 256
+```
+
+---
+
+## API 엔드포인트
+
+| Method | Path | 설명 |
+|---|---|---|
+| `GET` | `/api/health` | 헬스체크 |
+| `GET` | `/api/status` | 현재 실행 중인 스테이지 |
+| `POST` | `/api/run/{stage}` | 스테이지 실행 (`env·collect·il·rl·export`) |
+| `GET` | `/api/logs/stream` | 실시간 로그 SSE 스트림 |
+| `GET` | `/api/metrics/stream` | RL/IL 메트릭 SSE 스트림 |
+| `GET` | `/api/artifacts` | 내보낸 파일 목록 |
+| `GET` | `/api/demos` | 수집된 데모 HDF5 목록 |
+| `GET` | `/api/config` | 전체 YAML 설정 조회 |
+
+---
+
+## 테스트
+
+```bash
+# Python 단위 테스트
+pytest tests/
+
+# 프론트엔드 컴포넌트 테스트
+cd dashboard && npm test
+```
+
+---
+
+## 노트북
+
+| 노트북 | 설명 | 실행 |
+|---|---|---|
+| [ovrtx_minimal_colab.ipynb](notebooks/ovrtx_minimal_colab.ipynb) | NVIDIA OVRTX로 OpenUSD 씬 렌더링 → PNG 저장 | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/00saridon/PhysicalAI/blob/main/notebooks/ovrtx_minimal_colab.ipynb) |
+
+---
+
+## 기술 스택
+
+**백엔드**
+- Python · FastAPI · uvicorn · SSE-Starlette
+- PyTorch · Stable-Baselines3 · ONNX · h5py
+
+**프론트엔드**
+- React 18 · TypeScript · Vite
+- Tailwind CSS · Recharts · TanStack Query
+
+**환경**
+- NVIDIA Isaac Sim (Isaac Lab)
+- NVIDIA Omniverse USD pipeline
+
+---
+
+## Contributing
+
+현재 개인 프로젝트로 개발 중입니다.  
+버그 리포트나 제안은 [Issues](https://github.com/00saridon/PhysicalAI/issues)에 남겨 주세요.
+
+---
+
+## License
+
+MIT License © 2025 [hyunoh](https://github.com/00saridon)

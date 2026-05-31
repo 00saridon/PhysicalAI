@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip show *)",
+      "Bash(pip list *)",
+      "Bash(gh secret list *)",
+      "Bash(claude mcp list *)"
+    ],
+    "deny": []
+  }
+}
