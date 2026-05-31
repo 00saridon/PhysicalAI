@@ -1,9 +1,0 @@
-import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { clsx } from 'clsx';
-export function RewardChart({ points }) {
-    const [metric, setMetric] = useState('rew_mean');
-    const filtered = points.filter(p => p[metric] !== undefined);
-    return (_jsxs("div", { className: "bg-panel border border-border rounded-xl p-4 flex flex-col gap-3", children: [_jsxs("div", { className: "flex items-center justify-between", children: [_jsx("p", { className: "text-xs font-bold text-muted uppercase tracking-widest", children: "Training Metrics" }), _jsx("div", { className: "flex gap-1", children: ['rew_mean', 'loss'].map(m => (_jsx("button", { onClick: () => setMetric(m), className: clsx('text-[10px] font-bold px-2 py-0.5 rounded', metric === m ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-400'), children: m === 'rew_mean' ? 'Reward' : 'Loss' }, m))) })] }), _jsx("div", { className: "h-36", children: filtered.length === 0 ? (_jsx("div", { className: "h-full flex items-center justify-center text-slate-600 text-xs", children: "Waiting for training data..." })) : (_jsx(ResponsiveContainer, { width: "100%", height: "100%", children: _jsxs(LineChart, { data: filtered, margin: { top: 4, right: 8, bottom: 0, left: -16 }, children: [_jsx(CartesianGrid, { strokeDasharray: "3 3", stroke: "#2d3148" }), _jsx(XAxis, { dataKey: "step", stroke: "#475569", tick: { fontSize: 10 } }), _jsx(YAxis, { stroke: "#475569", tick: { fontSize: 10 } }), _jsx(Tooltip, { contentStyle: { background: '#1a1d2e', border: '1px solid #2d3148', fontSize: 11 }, labelStyle: { color: '#94a3b8' } }), _jsx(Line, { type: "monotone", dataKey: metric, stroke: "#76b900", dot: false, strokeWidth: 2, isAnimationActive: false })] }) })) })] }));
-}

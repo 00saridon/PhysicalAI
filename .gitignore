@@ -11,6 +11,9 @@ __pycache__/
 node_modules/
 dashboard/node_modules/
 dashboard/dist/
+# compiled TS output accidentally emitted into src by `tsc` (build now uses --noEmit)
+dashboard/src/**/*.js
+dashboard/src/**/*.js.map
 
 # dev utilities
 demo_screenshot.py
