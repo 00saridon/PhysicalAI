@@ -2,6 +2,8 @@ import asyncio
 import json
 import os
 import re
+import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -83,7 +85,7 @@ _MOCK_LOGS: dict[str, list[tuple[float, str]]] = {
 
 class SubprocessRunner:
     def __init__(self):
-        self._process: asyncio.subprocess.Process | None = None
+        self._process: subprocess.Popen | None = None
         self._mock_task: asyncio.Task | None = None
         self.current_stage: str | None = None
         self.log_bus = EventBus()
@@ -106,14 +108,23 @@ class SubprocessRunner:
             self._mock_task = asyncio.create_task(self._run_mock(stage))
             return
         extra_args = extra_args or []
-        cmd = ["python", "run.py", stage] + extra_args
-        self._process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
+        # `-u` keeps the child's stdout unbuffered so logs stream live.
+        cmd = ["python", "-u", "run.py", stage] + extra_args
+        loop = asyncio.get_running_loop()
+        # Use a thread + subprocess.Popen rather than asyncio.create_subprocess_exec:
+        # uvicorn --reload forces a SelectorEventLoop on Windows, where the asyncio
+        # subprocess API raises NotImplementedError. Popen works under any loop.
+        self._process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             cwd=str(self._project_root),
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,
         )
-        asyncio.create_task(self._drain())
+        threading.Thread(target=self._drain, args=(loop,), daemon=True).start()
 
     async def _run_mock(self, stage: str) -> None:
         logs = _MOCK_LOGS.get(stage, [(1.0, f"[{stage.upper()}] Stage completed (mock)")])
@@ -136,28 +147,35 @@ class SubprocessRunner:
         await self.log_bus.publish(ev)
         await self.metric_bus.publish(ev)
 
-    async def _drain(self) -> None:
-        assert self._process and self._process.stdout
-        while True:
-            raw = await self._process.stdout.readline()
-            if not raw:
-                break
-            text = raw.decode(errors="replace").rstrip()
+    def _drain(self, loop: asyncio.AbstractEventLoop) -> None:
+        """Runs in a background thread: reads child stdout line-by-line and
+        forwards each line to the async EventBuses on the server's event loop."""
+        proc = self._process
+        assert proc and proc.stdout
+
+        def publish(bus: EventBus, ev: dict) -> None:
+            # Bridge from this worker thread back onto the asyncio loop.
+            try:
+                asyncio.run_coroutine_threadsafe(bus.publish(ev), loop).result()
+            except RuntimeError:
+                pass  # loop stopped (e.g. server shutdown) — nothing to do
+
+        for raw in proc.stdout:
+            text = raw.rstrip()
             ts = int(time.time())
-            log_ev = {"event": "log", "data": json.dumps({"line": text, "ts": ts})}
-            await self.log_bus.publish(log_ev)
+            publish(self.log_bus, {"event": "log", "data": json.dumps({"line": text, "ts": ts})})
 
             m = _RL_RE.search(text)
             if m:
                 metric = {"step": int(m.group(1)), "rew_mean": float(m.group(2)), "stage": "rl", "ts": ts}
-                await self.metric_bus.publish({"event": "metric", "data": json.dumps(metric)})
+                publish(self.metric_bus, {"event": "metric", "data": json.dumps(metric)})
                 continue
             m = _IL_RE.search(text)
             if m:
                 metric = {"step": int(m.group(1)), "loss": float(m.group(2)), "stage": "il", "ts": ts}
-                await self.metric_bus.publish({"event": "metric", "data": json.dumps(metric)})
+                publish(self.metric_bus, {"event": "metric", "data": json.dumps(metric)})
 
-        exit_code = await self._process.wait()
+        exit_code = proc.wait()
         stage = self.current_stage
         self._process = None
         self.current_stage = None
@@ -167,5 +185,5 @@ class SubprocessRunner:
         else:
             payload = {"stage": stage, "exit_code": exit_code, "msg": f"process exited {exit_code}"}
             ev = {"event": "error", "data": json.dumps(payload)}
-        await self.log_bus.publish(ev)
-        await self.metric_bus.publish(ev)
+        publish(self.log_bus, ev)
+        publish(self.metric_bus, ev)
