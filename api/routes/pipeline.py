@@ -1,8 +1,13 @@
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
 
 router = APIRouter()
 
 VALID_STAGES = {"env", "collect", "il", "rl", "export"}
+
+
+class ModeRequest(BaseModel):
+    mock: bool
 
 PREREQS: dict[str, str | None] = {
     "env": None,
@@ -19,6 +24,20 @@ async def get_status(request: Request):
     return {"running": runner.is_running(), "stage": runner.current_stage}
 
 
+@router.get("/api/mode")
+async def get_mode(request: Request):
+    return {"mock": request.app.state.runner.mock_mode}
+
+
+@router.post("/api/mode")
+async def set_mode(body: ModeRequest, request: Request):
+    runner = request.app.state.runner
+    if runner.is_running():
+        raise HTTPException(status_code=409, detail="Cannot change mode while a stage is running")
+    runner.mock_mode = body.mock
+    return {"mock": runner.mock_mode}
+
+
 @router.post("/api/run/{stage}")
 async def run_stage(stage: str, request: Request, validate: bool = False):
     if stage not in VALID_STAGES:
@@ -27,9 +46,8 @@ async def run_stage(stage: str, request: Request, validate: bool = False):
     if runner.is_running():
         raise HTTPException(status_code=409, detail=f"Stage '{runner.current_stage}' is already running")
 
-    import os
-    mock_mode = os.getenv("MOCK_PIPELINE", "false").strip().lower() == "true"
-    if not mock_mode:
+    if not runner.mock_mode:
+        import os
         prereq = PREREQS.get(stage)
         if prereq and not os.path.exists(prereq):
             raise HTTPException(status_code=422, detail=f"Prerequisite missing: {prereq}")

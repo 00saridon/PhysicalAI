@@ -7,7 +7,7 @@ import { Training } from './pages/Training'
 import { Demos } from './pages/Demos'
 import { Artifacts } from './pages/Artifacts'
 import { Config } from './pages/Config'
-import { usePipelineStatus, useRunStage } from './hooks/usePipeline'
+import { usePipelineStatus, useRunStage, usePipelineMode, useSetMode } from './hooks/usePipeline'
 
 export type NavPage = 'Overview' | 'Run' | 'Training' | 'Demos' | 'Artifacts' | 'Config'
 
@@ -27,6 +27,8 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { data: status } = usePipelineStatus()
   const { mutate: runStage } = useRunStage()
+  const { data: mode } = usePipelineMode()
+  const { mutate: setMode, isPending: modePending } = useSetMode()
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const handleNav = (p: NavPage) => {
@@ -60,7 +62,9 @@ export default function App() {
           onNavHome={() => handleNav('Overview')}
           onNewRun={() => runStage({ stage: 'env', validate: true })}
           running={status?.running ?? false}
-          mockMode
+          mock={mode?.mock ?? true}
+          onSetMode={setMode}
+          modePending={modePending}
         />
         <div ref={scrollRef} className="flex-1 overflow-y-auto">
           <PageContent page={page} />

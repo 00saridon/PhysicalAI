@@ -29,6 +29,13 @@ export const api = {
     const qs = params.toString() ? `?${params}` : ''
     return _fetch<{ started: string }>(`/run/${stage}${qs}`, { method: 'POST' })
   },
+  getMode: () => _fetch<{ mock: boolean }>('/mode'),
+  setMode: (mock: boolean) =>
+    _fetch<{ mock: boolean }>('/mode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mock }),
+    }),
   getArtifacts: () => _fetch<Artifact[]>('/artifacts'),
   artifactDownloadUrl: (id: string) => `${BASE}/artifacts/${id}/download`,
   getDemos: () => _fetch<DemoFile[]>('/demos'),

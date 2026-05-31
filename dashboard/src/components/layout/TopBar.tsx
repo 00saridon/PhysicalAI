@@ -1,5 +1,6 @@
 import { clsx } from 'clsx'
 import type { NavPage } from '../../App'
+import { ModeToggle } from './ModeToggle'
 
 interface Props {
   page: NavPage
@@ -7,10 +8,12 @@ interface Props {
   onNavHome: () => void
   onNewRun: () => void
   running: boolean
-  mockMode?: boolean
+  mock: boolean
+  onSetMode: (mock: boolean) => void
+  modePending?: boolean
 }
 
-export function TopBar({ page, onMenuToggle, onNavHome, onNewRun, running, mockMode }: Props) {
+export function TopBar({ page, onMenuToggle, onNavHome, onNewRun, running, mock, onSetMode, modePending }: Props) {
   return (
     <header className="h-12 flex-shrink-0 bg-panel border-b border-border flex items-center px-4 gap-3">
       {/* 모바일 햄버거 버튼 */}
@@ -30,11 +33,7 @@ export function TopBar({ page, onMenuToggle, onNavHome, onNewRun, running, mockM
 
       <div className="flex-1" />
 
-      {mockMode && (
-        <span className="hidden sm:inline text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-900 text-emerald-400">
-          mock_mode
-        </span>
-      )}
+      <ModeToggle mock={mock} onChange={onSetMode} disabled={running || modePending} pending={modePending} />
 
       <button
         onClick={onNewRun}

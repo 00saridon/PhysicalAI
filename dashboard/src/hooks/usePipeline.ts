@@ -19,6 +19,25 @@ export function useRunStage() {
   })
 }
 
+export function usePipelineMode() {
+  return useQuery({
+    queryKey: ['pipeline-mode'],
+    queryFn: api.getMode,
+    refetchInterval: 5000,
+  })
+}
+
+export function useSetMode() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (mock: boolean) => api.setMode(mock),
+    onSuccess: (data) => {
+      qc.setQueryData(['pipeline-mode'], data)
+      qc.invalidateQueries({ queryKey: ['pipeline-mode'] })
+    },
+  })
+}
+
 export function useArtifacts() {
   return useQuery({
     queryKey: ['artifacts'],

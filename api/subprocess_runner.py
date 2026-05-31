@@ -91,20 +91,21 @@ class SubprocessRunner:
         self.log_bus = EventBus()
         self.metric_bus = EventBus()
         self._project_root = Path(__file__).parent.parent  # PhysicalAI/
-        self._mock_mode = os.getenv("MOCK_PIPELINE", "false").lower() == "true"
+        # mock_mode is the initial default from the environment but can be
+        # toggled at runtime via the /api/mode endpoint (dashboard MOCK/REAL).
+        self.mock_mode = os.getenv("MOCK_PIPELINE", "false").strip().lower() == "true"
 
     def is_running(self) -> bool:
-        if self._mock_mode:
-            return self._mock_task is not None and not self._mock_task.done()
+        # mode-independent so a toggle between runs can't mask an active stage
+        if self._mock_task is not None and not self._mock_task.done():
+            return True
         return self._process is not None and self._process.returncode is None
 
     async def run(self, stage: str, extra_args: list[str] | None = None) -> None:
         if self.is_running():
             raise RuntimeError("already running")
         self.current_stage = stage
-        # check at call time so Railway Variable changes take effect without redeploy
-        mock_mode = os.getenv("MOCK_PIPELINE", "false").strip().lower() == "true"
-        if mock_mode:
+        if self.mock_mode:
             self._mock_task = asyncio.create_task(self._run_mock(stage))
             return
         extra_args = extra_args or []
