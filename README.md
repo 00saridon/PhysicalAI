@@ -189,6 +189,28 @@ npm run dev
   **ENV → COLLECT → IL → RL → EXPORT** 순서로 실행합니다. `configs/env.yaml`의
   `mock_mode: true` 덕분에 Isaac Sim 없이도 numpy 기반으로 동작합니다.
 
+#### 데이터 디렉터리 위치 (Windows · OneDrive 주의)
+
+`demos/`·`checkpoints/`·`outputs/`는 대용량(에피소드당 ~263MB, 데이터셋 GB 단위)입니다.
+저장소가 **OneDrive 동기화 폴더 안**에 있으면 OneDrive가 이 파일들을 클라우드로 오프로드해,
+실제 모드 IL이 데이터를 읽을 때 온디맨드 다운로드(하이드레이션)가 일어나 수십 분씩 느려집니다.
+
+해결: 이 세 디렉터리를 OneDrive 밖(예: `C:\physicalai-data\`)에 두고 저장소에는
+**디렉터리 정션**으로 연결합니다. 코드·설정 변경이 전혀 없고(상대 경로 그대로), 동기화도 안 됩니다.
+
+```powershell
+# 1) 데이터를 OneDrive 밖으로 이동 (같은 C: 볼륨이면 즉시)
+New-Item -ItemType Directory -Force C:\physicalai-data | Out-Null
+foreach ($d in 'demos','checkpoints','outputs') { Move-Item .\$d C:\physicalai-data\$d }
+
+# 2) 저장소에 정션 생성 (관리자 권한 불필요)
+foreach ($d in 'demos','checkpoints','outputs') { cmd /c mklink /J ".\$d" "C:\physicalai-data\$d" }
+```
+
+> 이미 OneDrive가 클라우드 전용으로 만든 파일이 있으면, 이동 전에 해당 파일을 한 번 읽어
+> 로컬로 내려받아야(하이드레이션) placeholder가 깨지지 않습니다. `demos/` 등은 `.gitignore`
+> 대상이라 정션으로 바꿔도 git에는 영향이 없습니다.
+
 ---
 
 ## 대시보드 페이지
