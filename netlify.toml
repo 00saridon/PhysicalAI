@@ -1,10 +1,10 @@
 [build]
-  base    = "OneDrive/Desktop/PhysicalAI/dashboard"
+  base    = "dashboard"
   command = "npm run build"
-  publish = "OneDrive/Desktop/PhysicalAI/dashboard/dist"
+  publish = "dist"
 
 [build.environment]
-  NODE_VERSION = "18"
+  NODE_VERSION = "20"
   VITE_API_URL = "https://physicalai-production.up.railway.app"
 
 # /api/* → Railway 백엔드로 프록시
