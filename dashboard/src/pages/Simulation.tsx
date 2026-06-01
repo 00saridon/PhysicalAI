@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Canvas } from '@react-three/fiber'
-import { OrbitControls, Grid, ContactShadows } from '@react-three/drei'
+import { OrbitControls, Grid, ContactShadows, Trail } from '@react-three/drei'
 import { clsx } from 'clsx'
 import { api } from '../api/client'
 
@@ -19,6 +19,10 @@ function ArmChain({ angles, i = 0 }: { angles: number[]; i?: number }) {
         <mesh castShadow><boxGeometry args={[0.16, 0.06, 0.16]} /><meshStandardMaterial color="#cbd5e1" metalness={0.6} roughness={0.3} /></mesh>
         <mesh position={[0.07, 0.09, 0]} castShadow><boxGeometry args={[0.03, 0.16, 0.07]} /><meshStandardMaterial color={NV} metalness={0.4} roughness={0.4} /></mesh>
         <mesh position={[-0.07, 0.09, 0]} castShadow><boxGeometry args={[0.03, 0.16, 0.07]} /><meshStandardMaterial color={NV} metalness={0.4} roughness={0.4} /></mesh>
+        {/* end-effector motion trail */}
+        <Trail width={2.5} length={6} color={'#a3e635'} attenuation={(t) => t * t} decay={1}>
+          <mesh position={[0, 0.12, 0]}><sphereGeometry args={[0.045, 12, 12]} /><meshBasicMaterial color="#c4f06b" /></mesh>
+        </Trail>
       </group>
     )
   }
@@ -106,6 +110,17 @@ export function Simulation() {
   const actions = traj?.actions[frame] ?? new Array(7).fill(0)
   const reward = traj?.rewards[frame] ?? 0
 
+  // Throttled synthetic RGB frame (~6 fps) synced to the actual dataset index
+  const apiBase = (import.meta.env.VITE_API_URL ?? '') + '/api'
+  const frameRef = useRef(0)
+  frameRef.current = frame
+  const [rgbIdx, setRgbIdx] = useState(0)
+  useEffect(() => {
+    if (!traj?.has_rgb) return
+    const id = setInterval(() => setRgbIdx(frameRef.current * (traj.stride || 1)), 150)
+    return () => clearInterval(id)
+  }, [traj])
+
   return (
     <div className="p-3 sm:p-5 flex flex-col gap-4 h-full min-h-0">
       {/* header */}
@@ -179,6 +194,23 @@ export function Simulation() {
 
           {/* telemetry side panel */}
           <div className="flex flex-col gap-3 overflow-y-auto">
+            {traj?.has_rgb && (
+              <div className="bg-panel border border-border rounded-xl p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[9px] font-black uppercase tracking-wider text-muted">RGB Observation · 224×224</p>
+                  <span className="text-[8px] font-mono text-slate-500">sensor cam</span>
+                </div>
+                <div className="rounded-lg overflow-hidden border border-nvidia/20 bg-black aspect-square">
+                  <img
+                    src={`${apiBase}/dataset/frame?idx=${rgbIdx}`}
+                    alt="synthetic RGB observation"
+                    className="w-full h-full object-cover"
+                    style={{ imageRendering: 'pixelated' }}
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="bg-panel border border-border rounded-xl p-3">
               <p className="text-[9px] font-black uppercase tracking-wider text-muted mb-2">Joint State · 7 DOF (rad)</p>
               <div className="flex flex-col gap-1.5">

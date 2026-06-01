@@ -26,6 +26,7 @@ export interface Trajectory {
   count: number
   joint_dim: number
   action_dim: number
+  has_rgb: boolean
   joints: number[][]
   actions: number[][]
   rewards: number[]
