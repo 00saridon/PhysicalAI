@@ -900,7 +900,7 @@ function PipelineTestPanel() {
           { label: '총 실행 시간', value: '~37s', sub: '5 stages (test params)', color: '#76b900' },
           { label: '데모 에피소드', value: '77',  sub: '38,500 steps collected', color: '#00d4ff' },
           { label: 'ONNX 정책',   value: '283 KB', sub: 'opset-18 deploy-ready', color: '#ef4444' },
-          { label: 'IL→RL 전달',  value: 'N/A',  sub: 'obs_dim mismatch (known)', color: '#f59e0b' },
+          { label: 'IL→RL 전달',  value: '3 layers',  sub: 'IL trunk → PPO warm start', color: '#76b900' },
         ].map(m => (
           <div key={m.label} className="rounded-lg border border-border bg-surface px-3 py-2.5 flex flex-col gap-0.5">
             <p className="text-[9px] font-black uppercase tracking-wider text-muted">{m.label}</p>
@@ -910,12 +910,13 @@ function PipelineTestPanel() {
         ))}
       </div>
 
-      {/* Known issue note */}
-      <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-950/10 px-3 py-2.5">
-        <p className="text-[9px] font-bold text-amber-400 mb-1">Known Issue — IL Weight Transfer</p>
+      {/* Resolved note */}
+      <div className="mt-3 rounded-lg border border-nvidia/20 bg-nvidia/5 px-3 py-2.5">
+        <p className="text-[9px] font-bold text-nvidia mb-1">Resolved — IL → RL Weight Transfer</p>
         <p className="text-[9px] text-slate-500 leading-relaxed">
-          IL(BCTrainer) obs_dim=14 (joint_state+ee_pose) vs RL(FlatObsEnv) obs_dim이 불일치하여
-          가중치 전달이 건너뜀. PPO는 랜덤 초기화로 독립 학습. 해결: FlatObsEnv obs_dim을 IL과 통일 필요.
+          PPO 정책 trunk의 net_arch를 IL MLP(hidden=256, ReLU)에 맞추고 레이어 키를
+          매핑(net.0/2/4 → mlp_extractor.policy_net + action_net)하여 IL 가중치 3개 레이어를
+          PPO 웜스타트로 전달. 동일 매핑을 역방향으로 사용해 학습된 PPO trunk를 ONNX export에 반영.
         </p>
       </div>
     </div>

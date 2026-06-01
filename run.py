@@ -107,16 +107,22 @@ def stage_export(args):
     env = IsaacEnv(env_cfg)
     obs_dim = 14
     action_dim = env.action_dim
-    policy = MLPPolicy(obs_dim=obs_dim, action_dim=action_dim)
 
     from stable_baselines3 import PPO
+    from trainer.weight_transfer import il_to_sb3_key_map, copy_weights
     sb3_model = PPO.load(exp_cfg["rl_checkpoint"])
     sb3_state = sb3_model.policy.state_dict()
+
+    # Size the export MLP to the trained PPO trunk so the trained weights map in.
+    hidden_dim = int(sb3_state["mlp_extractor.policy_net.0.weight"].shape[0])
+    policy = MLPPolicy(obs_dim=obs_dim, action_dim=action_dim, hidden_dim=hidden_dim)
     policy_state = policy.state_dict()
-    for k in policy_state:
-        if k in sb3_state and sb3_state[k].shape == policy_state[k].shape:
-            policy_state[k] = sb3_state[k]
+    # Reverse the IL->SB3 map to copy the trained PPO trunk back into the MLP.
+    rev_map = {v: k for k, v in il_to_sb3_key_map(policy_state).items()}
+    n = copy_weights(sb3_state, policy_state, rev_map)
     policy.load_state_dict(policy_state, strict=False)
+    print(f"[EXPORT] Loaded {n} trained tensors from RL policy into export MLP "
+          f"(hidden_dim={hidden_dim}).", flush=True)
 
     import os
     os.makedirs(exp_cfg["output_dir"], exist_ok=True)

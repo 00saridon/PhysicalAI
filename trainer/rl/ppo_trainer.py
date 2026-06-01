@@ -1,8 +1,9 @@
 import os
 import torch
+import torch.nn as nn
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
-from trainer.il.policy import MLPPolicy
+from trainer.weight_transfer import infer_hidden_dims, il_to_sb3_key_map, copy_weights
 
 
 class LogCallback(BaseCallback):
@@ -31,6 +32,17 @@ class PPOTrainer:
             import gymnasium as gym
             self.env = gym.make(env_id)
 
+        # If warm-starting from an IL checkpoint, size PPO's policy trunk to match
+        # the IL MLP (hidden widths + ReLU) so the weights actually line up.
+        il_path = cfg.get("il_checkpoint")
+        self._il_state = None
+        policy_kwargs: dict = {}
+        if il_path and os.path.exists(il_path):
+            self._il_state = torch.load(il_path, map_location="cpu")
+            hidden = infer_hidden_dims(self._il_state)
+            if hidden:
+                policy_kwargs = dict(net_arch=dict(pi=hidden, vf=hidden), activation_fn=nn.ReLU)
+
         self.model = PPO(
             "MlpPolicy",
             self.env,
@@ -39,31 +51,27 @@ class PPOTrainer:
             batch_size=cfg["batch_size"],
             n_epochs=cfg["n_epochs"],
             gamma=cfg["gamma"],
+            policy_kwargs=policy_kwargs,
             verbose=0,
         )
-        if cfg.get("il_checkpoint"):
-            self._load_il_weights(cfg["il_checkpoint"])
+        if self._il_state is not None:
+            self._load_il_weights()
 
-    def _load_il_weights(self, path: str):
+    def _load_il_weights(self):
         import warnings
-        obs_dim = self.env.observation_space.shape[0]
-        action_dim = self.env.action_space.shape[0]
-        il_policy = MLPPolicy(obs_dim=obs_dim, action_dim=action_dim)
-        il_policy.load_state_dict(torch.load(path, map_location="cpu"))
         sb3_state = self.model.policy.state_dict()
-        il_state = il_policy.state_dict()
-        transferred = 0
-        for k in il_state:
-            if k in sb3_state and sb3_state[k].shape == il_state[k].shape:
-                sb3_state[k] = il_state[k]
-                transferred += 1
+        key_map = il_to_sb3_key_map(self._il_state)
+        transferred = copy_weights(self._il_state, sb3_state, key_map)
         if transferred == 0:
             warnings.warn(
-                f"IL checkpoint '{path}' had no compatible layers with the RL policy. "
-                "Check that obs_dim and action_dim match between IL and RL environments.",
+                "IL checkpoint had no compatible layers with the RL policy. "
+                "Check that obs_dim/action_dim and hidden_dim match between IL and RL.",
                 UserWarning,
             )
+            return
         self.model.policy.load_state_dict(sb3_state, strict=False)
+        print(f"[RL] Warm-started PPO from IL checkpoint: "
+              f"transferred {transferred} tensors across {len(key_map)} layers.", flush=True)
 
     def train(self):
         checkpoint_cb = CheckpointCallback(
