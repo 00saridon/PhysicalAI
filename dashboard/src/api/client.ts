@@ -20,6 +20,17 @@ export interface DemoFile {
 
 export type ConfigMap = Record<string, unknown>
 
+export interface Trajectory {
+  n_total: number
+  stride: number
+  count: number
+  joint_dim: number
+  action_dim: number
+  joints: number[][]
+  actions: number[][]
+  rewards: number[]
+}
+
 export const api = {
   health: () => _fetch<{ status: string }>('/health'),
   getStatus: () => _fetch<PipelineStatus>('/status'),
@@ -40,4 +51,5 @@ export const api = {
   artifactDownloadUrl: (id: string) => `${BASE}/artifacts/${id}/download`,
   getDemos: () => _fetch<DemoFile[]>('/demos'),
   getConfig: () => _fetch<ConfigMap>('/config'),
+  getTrajectory: (frames = 240) => _fetch<Trajectory>(`/dataset/trajectory?frames=${frames}`),
 }

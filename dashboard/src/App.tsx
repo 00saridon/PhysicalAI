@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Sidebar } from './components/layout/Sidebar'
 import { TopBar } from './components/layout/TopBar'
 import { Overview } from './pages/Overview'
@@ -7,18 +7,26 @@ import { Training } from './pages/Training'
 import { Demos } from './pages/Demos'
 import { Artifacts } from './pages/Artifacts'
 import { Config } from './pages/Config'
+
+// Lazy-load the 3D page so three.js is split into its own chunk (loaded on demand)
+const Simulation = lazy(() => import('./pages/Simulation').then(m => ({ default: m.Simulation })))
 import { usePipelineStatus, useRunStage, usePipelineMode, useSetMode } from './hooks/usePipeline'
 
-export type NavPage = 'Overview' | 'Run' | 'Training' | 'Demos' | 'Artifacts' | 'Config'
+export type NavPage = 'Overview' | 'Run' | 'Training' | 'Demos' | 'Simulation' | 'Artifacts' | 'Config'
 
 function PageContent({ page }: { page: NavPage }) {
   switch (page) {
-    case 'Overview':  return <Overview />
-    case 'Run':       return <Run />
-    case 'Training':  return <Training />
-    case 'Demos':     return <Demos />
-    case 'Artifacts': return <Artifacts />
-    case 'Config':    return <Config />
+    case 'Overview':   return <Overview />
+    case 'Run':        return <Run />
+    case 'Training':   return <Training />
+    case 'Demos':      return <Demos />
+    case 'Simulation': return (
+      <Suspense fallback={<div className="p-8 text-sm text-muted">3D 뷰 로딩 중…</div>}>
+        <Simulation />
+      </Suspense>
+    )
+    case 'Artifacts':  return <Artifacts />
+    case 'Config':     return <Config />
   }
 }
 

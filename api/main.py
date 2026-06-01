@@ -5,6 +5,7 @@ from api.subprocess_runner import SubprocessRunner
 from api.routes.pipeline import router as pipeline_router
 from api.routes.logs import router as logs_router
 from api.routes.artifacts import router as artifacts_router
+from api.routes.dataset import router as dataset_router
 
 app = FastAPI(title="PhysicalAI Dashboard API")
 app.state.runner = SubprocessRunner()
@@ -25,6 +26,7 @@ app.add_middleware(
 app.include_router(pipeline_router)
 app.include_router(logs_router)
 app.include_router(artifacts_router)
+app.include_router(dataset_router)
 
 @app.get("/api/health")
 async def health():

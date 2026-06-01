@@ -7,6 +7,7 @@ const NAV_ITEMS: { label: NavPage; icon: string }[] = [
   { label: 'Run',       icon: '▶' },
   { label: 'Training',  icon: '📈' },
   { label: 'Demos',     icon: '🗄' },
+  { label: 'Simulation', icon: '🦾' },
   { label: 'Artifacts', icon: '📦' },
   { label: 'Config',    icon: '⚙' },
 ]
