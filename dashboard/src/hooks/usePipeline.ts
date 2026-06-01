@@ -45,3 +45,18 @@ export function useArtifacts() {
     refetchInterval: 5000,
   })
 }
+
+export function useDemos() {
+  return useQuery({
+    queryKey: ['demos'],
+    queryFn: api.getDemos,
+    refetchInterval: 5000,
+  })
+}
+
+export function useConfig() {
+  return useQuery({
+    queryKey: ['config'],
+    queryFn: api.getConfig,
+  })
+}

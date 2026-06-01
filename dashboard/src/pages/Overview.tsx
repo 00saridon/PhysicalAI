@@ -1,10 +1,11 @@
 import { clsx } from 'clsx'
-import type { Stage } from '../types/pipeline'
+import type { Stage, Artifact, MetricPoint } from '../types/pipeline'
+import type { DemoFile, ConfigMap } from '../api/client'
 import { PipelineBar } from '../components/pipeline/PipelineBar'
 import { LogPanel } from '../components/monitoring/LogPanel'
 import { RewardChart } from '../components/monitoring/RewardChart'
 import { ArtifactList } from '../components/artifacts/ArtifactList'
-import { usePipelineStatus, useRunStage, useArtifacts } from '../hooks/usePipeline'
+import { usePipelineStatus, useRunStage, useArtifacts, useDemos, useConfig, usePipelineMode } from '../hooks/usePipeline'
 import { useSSELogs } from '../hooks/useSSELogs'
 import { useSSEMetrics } from '../hooks/useSSEMetrics'
 
@@ -793,115 +794,152 @@ function DatasetQualityPanel() {
 }
 
 /* ─────────────────────────────────────────────────────────── */
-/*  Pipeline Test Result Panel                                 */
+/*  Pipeline Test Result Panel — live from /api/artifacts·demos·config */
 /* ─────────────────────────────────────────────────────────── */
-const TEST_STAGES = [
-  {
-    id: 'ENV',
-    color: '#76b900',
-    time: '< 1s',
-    rows: [
-      { label: 'Status',   value: 'PASS',                        ok: true },
-      { label: 'Obs keys', value: 'rgb · depth · joint_state · ee_pose', ok: true },
-      { label: 'Mode',     value: 'mock_mode = True',            ok: true },
-    ],
-  },
-  {
-    id: 'COLLECT',
-    color: '#00d4ff',
-    time: '~5s',
-    rows: [
-      { label: 'Episodes',  value: '77 total (+5 new)',  ok: true },
-      { label: 'Steps/ep',  value: '500',                ok: true },
-      { label: 'Format',    value: 'HDF5 per episode',   ok: true },
-    ],
-  },
-  {
-    id: 'IL',
-    color: '#a855f7',
-    time: '~8s',
-    rows: [
-      { label: 'Epochs',       value: '5 (test) / 100 (full)', ok: true },
-      { label: 'Loss trend',   value: '0.3331 → 0.3330',       ok: true },
-      { label: 'Best saved',   value: 'checkpoints/il/best.pt', ok: true },
-    ],
-  },
-  {
-    id: 'RL',
-    color: '#f59e0b',
-    time: '~20s',
-    rows: [
-      { label: 'Steps',         value: '5,000 (test) / 50,000 (full)', ok: true },
-      { label: 'Reward @ 6144', value: '+0.0026',                      ok: true },
-      { label: 'Best saved',    value: 'checkpoints/rl/best.zip',      ok: true },
-    ],
-  },
-  {
-    id: 'EXPORT',
-    color: '#ef4444',
-    time: '~3s',
-    rows: [
-      { label: 'policy.onnx',   value: '282.9 KB · opset-18',  ok: true },
-      { label: 'HDF5 frames',   value: '1,000 (RGB std 22.6)', ok: true },
-      { label: 'Action std',    value: '~0.152 (all 10 DOF)',  ok: true },
-    ],
-  },
-]
+const STAGE_COLORS = ['#76b900', '#00d4ff', '#a855f7', '#f59e0b', '#ef4444']
 
-function PipelineTestPanel() {
+function kb(b?: number) { return b ? `${(b / 1024).toFixed(1)} KB` : '—' }
+function mb(b?: number) { return b ? `${(b / 1e6).toFixed(1)} MB` : '—' }
+
+interface TestPanelProps {
+  artifacts: Artifact[]
+  demos: DemoFile[]
+  config: ConfigMap
+  mode?: { mock: boolean }
+  metrics: MetricPoint[]
+}
+
+function PipelineTestPanel({ artifacts, demos, config, mode, metrics }: TestPanelProps) {
+  const byName = (name: string) => artifacts.find(a => a.name === name)
+  const onnx = byName('policy.onnx')
+  const ilBest = byName('best.pt')
+  const rlBest = byName('best.zip')
+  const dataset = artifacts.find(a => a.type === 'hdf5' && a.path.toLowerCase().includes('dataset'))
+
+  const cfg = config as Record<string, any>
+  const env = cfg.env ?? {}, col = cfg.collector ?? {}, il = cfg.il ?? {}, rl = cfg.rl ?? {}, exp = cfg.export ?? {}
+
+  const epCount = demos.length
+  const stepsPerEp = col.max_steps_per_episode
+  const lastIL = [...metrics].reverse().find(p => p.stage === 'il')
+  const lastRL = [...metrics].reverse().find(p => p.stage === 'rl')
+
+  const obsKeys = [
+    env?.sensor?.rgb?.enabled && 'rgb',
+    env?.sensor?.depth?.enabled && 'depth',
+    env?.sensor?.joint_state && 'joint_state',
+    env?.sensor?.ee_pose && 'ee_pose',
+  ].filter(Boolean).join(' · ')
+
+  const stages = [
+    {
+      id: 'ENV', done: Object.keys(env).length > 0, rows: [
+        { label: 'Mode', value: mode ? (mode.mock ? 'MOCK' : 'REAL') : '—', ok: true },
+        { label: 'Obs keys', value: obsKeys || '—', ok: true },
+        { label: 'mock_mode', value: env?.mock_mode === undefined ? '—' : String(env.mock_mode), ok: true },
+      ],
+    },
+    {
+      id: 'COLLECT', done: epCount > 0, rows: [
+        { label: 'Episodes', value: epCount ? `${epCount}개` : '—', ok: epCount > 0 },
+        { label: 'Steps/ep', value: stepsPerEp ? String(stepsPerEp) : '—', ok: true },
+        { label: 'Format', value: 'HDF5 per episode', ok: true },
+      ],
+    },
+    {
+      id: 'IL', done: !!ilBest, rows: [
+        { label: 'Epochs', value: il.epochs ? String(il.epochs) : '—', ok: true },
+        { label: 'Loss', value: lastIL?.loss !== undefined ? lastIL.loss.toFixed(4) : (ilBest ? 'trained' : '—'), ok: true },
+        { label: 'best.pt', value: ilBest ? kb(ilBest.size_bytes) : '미생성', ok: !!ilBest },
+      ],
+    },
+    {
+      id: 'RL', done: !!rlBest, rows: [
+        { label: 'Timesteps', value: rl.total_timesteps ? Number(rl.total_timesteps).toLocaleString() : '—', ok: true },
+        { label: 'Reward', value: lastRL?.rew_mean !== undefined ? `${lastRL.rew_mean.toFixed(4)}${lastRL.step ? ` @${lastRL.step}` : ''}` : (rlBest ? 'trained' : '—'), ok: true },
+        { label: 'best.zip', value: rlBest ? mb(rlBest.size_bytes) : '미생성', ok: !!rlBest },
+      ],
+    },
+    {
+      id: 'EXPORT', done: !!onnx, rows: [
+        { label: 'policy.onnx', value: onnx ? `${kb(onnx.size_bytes)} · opset-18` : '미생성', ok: !!onnx },
+        { label: 'dataset', value: dataset ? mb(dataset.size_bytes) : '미생성', ok: !!dataset },
+        { label: 'rollouts', value: exp?.dataset?.render_rollouts ? String(exp.dataset.render_rollouts) : '—', ok: true },
+      ],
+    },
+  ]
+
+  const doneCount = stages.filter(s => s.done).length
+  const allPassed = doneCount === stages.length
+
+  const summary = [
+    { label: '데모 에피소드', value: epCount ? String(epCount) : '—',
+      sub: epCount && stepsPerEp ? `${(epCount * Number(stepsPerEp)).toLocaleString()} steps` : 'collect 후 생성', color: '#00d4ff' },
+    { label: 'IL 체크포인트', value: ilBest ? 'best.pt' : '—',
+      sub: ilBest ? kb(ilBest.size_bytes) : '미생성', color: '#a855f7' },
+    { label: 'ONNX 정책', value: onnx ? kb(onnx.size_bytes) : '—',
+      sub: onnx ? 'opset-18 deploy-ready' : 'export 후 생성', color: '#ef4444' },
+    { label: 'IL→RL 전달', value: '3 layers', sub: 'IL trunk → PPO warm start', color: '#76b900' },
+  ]
+
   return (
     <div className="bg-panel border border-border rounded-xl p-5">
       <div className="flex items-center justify-between mb-5">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-muted">파이프라인 실행 테스트</p>
-          <p className="text-sm font-bold text-slate-200 mt-0.5">End-to-End Test Run · All 5 Stages Passed</p>
+          <p className="text-[10px] font-black uppercase tracking-widest text-muted">파이프라인 실행 상태</p>
+          <p className="text-sm font-bold text-slate-200 mt-0.5">Live Pipeline Status · 산출물 기반</p>
         </div>
-        <span className="flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded-full border border-emerald-500/40 text-emerald-400 bg-emerald-900/20 font-bold">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-          ALL PASSED
+        <span className={clsx(
+          'flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded-full border font-bold',
+          allPassed ? 'border-emerald-500/40 text-emerald-400 bg-emerald-900/20'
+                    : 'border-amber-500/40 text-amber-400 bg-amber-900/20'
+        )}>
+          <span className={clsx('w-1.5 h-1.5 rounded-full', allPassed ? 'bg-emerald-400' : 'bg-amber-400')} />
+          {allPassed ? 'ALL PASSED' : `${doneCount}/5 READY`}
         </span>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-        {TEST_STAGES.map((s, i) => (
-          <div
-            key={s.id}
-            className="rounded-xl border p-3 flex flex-col gap-2"
-            style={{ borderColor: s.color + '35', background: 'linear-gradient(135deg,#0d1018 0%,#111620 100%)' }}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                <span className="text-[10px] font-black" style={{ color: s.color }}>{String(i + 1).padStart(2, '0')} {s.id}</span>
-              </div>
-              <span className="text-[8px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-500">{s.time}</span>
-            </div>
-
-            {/* Result rows */}
-            <div className="flex flex-col gap-1 pt-1.5 border-t border-border/60">
-              {s.rows.map(r => (
-                <div key={r.label} className="flex items-start gap-1.5">
-                  <span className="text-emerald-500 text-[8px] mt-0.5 flex-shrink-0">✓</span>
-                  <div className="min-w-0">
-                    <span className="text-[8px] text-slate-500">{r.label}: </span>
-                    <span className="text-[8px] font-mono" style={{ color: s.color + 'cc' }}>{r.value}</span>
-                  </div>
+        {stages.map((s, i) => {
+          const color = STAGE_COLORS[i]
+          return (
+            <div
+              key={s.id}
+              className="rounded-xl border p-3 flex flex-col gap-2"
+              style={{ borderColor: color + '35', background: 'linear-gradient(135deg,#0d1018 0%,#111620 100%)' }}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className={clsx('w-2 h-2 rounded-full', s.done ? 'bg-emerald-400' : 'bg-slate-600')} />
+                  <span className="text-[10px] font-black" style={{ color }}>{String(i + 1).padStart(2, '0')} {s.id}</span>
                 </div>
-              ))}
+                <span className={clsx('text-[8px] font-mono px-1.5 py-0.5 rounded',
+                  s.done ? 'bg-emerald-900/40 text-emerald-400' : 'bg-slate-800 text-slate-500')}>
+                  {s.done ? 'DONE' : 'PENDING'}
+                </span>
+              </div>
+
+              <div className="flex flex-col gap-1 pt-1.5 border-t border-border/60">
+                {s.rows.map(r => (
+                  <div key={r.label} className="flex items-start gap-1.5">
+                    <span className={clsx('text-[8px] mt-0.5 flex-shrink-0', r.ok ? 'text-emerald-500' : 'text-slate-600')}>
+                      {r.ok ? '✓' : '○'}
+                    </span>
+                    <div className="min-w-0">
+                      <span className="text-[8px] text-slate-500">{r.label}: </span>
+                      <span className="text-[8px] font-mono" style={{ color: color + 'cc' }}>{r.value}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
-      {/* Summary bar */}
+      {/* Summary bar (live) */}
       <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: '총 실행 시간', value: '~37s', sub: '5 stages (test params)', color: '#76b900' },
-          { label: '데모 에피소드', value: '77',  sub: '38,500 steps collected', color: '#00d4ff' },
-          { label: 'ONNX 정책',   value: '283 KB', sub: 'opset-18 deploy-ready', color: '#ef4444' },
-          { label: 'IL→RL 전달',  value: '3 layers',  sub: 'IL trunk → PPO warm start', color: '#76b900' },
-        ].map(m => (
+        {summary.map(m => (
           <div key={m.label} className="rounded-lg border border-border bg-surface px-3 py-2.5 flex flex-col gap-0.5">
             <p className="text-[9px] font-black uppercase tracking-wider text-muted">{m.label}</p>
             <p className="text-lg font-black font-mono" style={{ color: m.color }}>{m.value}</p>
@@ -953,6 +991,9 @@ function StatCard({
 export function Overview() {
   const { data: status } = usePipelineStatus()
   const { data: artifacts = [] } = useArtifacts()
+  const { data: demos = [] } = useDemos()
+  const { data: config = {} } = useConfig()
+  const { data: mode } = usePipelineMode()
   const { mutate: runStage } = useRunStage()
   const apiBase = (import.meta.env.VITE_API_URL ?? '') + '/api'
   const { lines, connected } = useSSELogs(`${apiBase}/logs/stream`)
@@ -1162,8 +1203,8 @@ export function Overview() {
           <LogPanel lines={lines} connected={connected} />
         </div>
 
-        {/* Pipeline Test Results */}
-        <PipelineTestPanel />
+        {/* Pipeline Test Results (live) */}
+        <PipelineTestPanel artifacts={artifacts} demos={demos} config={config} mode={mode} metrics={points} />
 
         {/* Dataset Quality Verification */}
         <DatasetQualityPanel />
