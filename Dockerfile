@@ -14,9 +14,11 @@ RUN pip install --no-cache-dir -r requirements-railway.txt
 # 소스 복사
 COPY . .
 
-# configs, demos, checkpoints, outputs 디렉터리 생성 + 데모용 샘플 artifact 파일 생성
+# Seed demo artifacts: placeholder blobs for listed-only files, and a real
+# (parseable) synthetic_v1.hdf5 so the Simulation / dataset endpoints work.
 RUN mkdir -p configs demos checkpoints/il checkpoints/rl outputs/policy outputs/dataset && \
-    python3 -c "import os; [open(f, 'wb').write(b'MOCK' * 1024) for f in ['outputs/policy/policy.onnx', 'outputs/dataset/synthetic_v1.hdf5', 'checkpoints/il/best.pt', 'checkpoints/rl/best.zip']]"
+    python3 -c "[open(f, 'wb').write(b'MOCK' * 1024) for f in ['outputs/policy/policy.onnx', 'checkpoints/il/best.pt', 'checkpoints/rl/best.zip']]" && \
+    python3 scripts/seed_demo_data.py
 
 # Railway는 PORT 환경변수를 자동 주입
 ENV MOCK_PIPELINE=true
