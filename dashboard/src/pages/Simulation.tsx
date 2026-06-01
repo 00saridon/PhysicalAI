@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Canvas } from '@react-three/fiber'
-import { OrbitControls, Grid, ContactShadows, Trail } from '@react-three/drei'
+import { Canvas, useFrame } from '@react-three/fiber'
+import { OrbitControls, Grid, ContactShadows, Trail, Html } from '@react-three/drei'
 import { clsx } from 'clsx'
+import * as THREE from 'three'
 import { api } from '../api/client'
 
 const NV = '#76b900'
@@ -11,18 +12,30 @@ const AXES: ('x' | 'y' | 'z')[] = ['y', 'z', 'y', 'z', 'y', 'z', 'y']
 const JOINT_COLORS = ['#76b900', '#00d4ff', '#a855f7', '#f59e0b', '#ef4444', '#10b981', '#f97316']
 const GAIN = 1.4 // amplify joint angles for clearer visible motion
 
+function JointLabel({ text, color, show }: { text: string; color: string; show: boolean }) {
+  if (!show) return null
+  return (
+    <Html position={[0.14, 0, 0]} center distanceFactor={7} style={{ pointerEvents: 'none' }} zIndexRange={[10, 0]}>
+      <div className="text-[10px] font-black px-1 rounded leading-none py-0.5" style={{ color: '#04060a', background: color }}>{text}</div>
+    </Html>
+  )
+}
+
 /* ── 3D articulated arm (recursive kinematic chain) ── */
-function ArmChain({ angles, i = 0 }: { angles: number[]; i?: number }) {
+function ArmChain({ angles, eeRef, showLabels, i = 0 }: {
+  angles: number[]; eeRef?: React.RefObject<THREE.Mesh>; showLabels?: boolean; i?: number
+}) {
   if (i >= LINK_LEN.length) {
     return (
       <group>
         <mesh castShadow><boxGeometry args={[0.16, 0.06, 0.16]} /><meshStandardMaterial color="#cbd5e1" metalness={0.6} roughness={0.3} /></mesh>
         <mesh position={[0.07, 0.09, 0]} castShadow><boxGeometry args={[0.03, 0.16, 0.07]} /><meshStandardMaterial color={NV} metalness={0.4} roughness={0.4} /></mesh>
         <mesh position={[-0.07, 0.09, 0]} castShadow><boxGeometry args={[0.03, 0.16, 0.07]} /><meshStandardMaterial color={NV} metalness={0.4} roughness={0.4} /></mesh>
-        {/* end-effector motion trail */}
+        {/* end-effector marker (ref tracked for trail + coordinate readout) */}
         <Trail width={2.5} length={6} color={'#a3e635'} attenuation={(t) => t * t} decay={1}>
-          <mesh position={[0, 0.12, 0]}><sphereGeometry args={[0.045, 12, 12]} /><meshBasicMaterial color="#c4f06b" /></mesh>
+          <mesh ref={eeRef} position={[0, 0.12, 0]}><sphereGeometry args={[0.045, 12, 12]} /><meshBasicMaterial color="#c4f06b" /></mesh>
         </Trail>
+        <group position={[0, 0.12, 0]}><JointLabel text="EE" color="#c4f06b" show={!!showLabels} /></group>
       </group>
     )
   }
@@ -32,18 +45,38 @@ function ArmChain({ angles, i = 0 }: { angles: number[]; i?: number }) {
   return (
     <group rotation={rot}>
       <mesh castShadow><sphereGeometry args={[0.09, 20, 20]} /><meshStandardMaterial color="#1e2d10" emissive={NV} emissiveIntensity={0.18} metalness={0.4} roughness={0.4} /></mesh>
+      <JointLabel text={`J${i}`} color={JOINT_COLORS[i]} show={!!showLabels} />
       <mesh position={[0, len / 2, 0]} castShadow>
         <cylinderGeometry args={[0.06, 0.052, len, 18]} />
         <meshStandardMaterial color={i % 2 ? '#2a3344' : '#3a4a22'} metalness={0.55} roughness={0.35} />
       </mesh>
       <group position={[0, len, 0]}>
-        <ArmChain angles={angles} i={i + 1} />
+        <ArmChain angles={angles} eeRef={eeRef} showLabels={showLabels} i={i + 1} />
       </group>
     </group>
   )
 }
 
-function RobotArm({ angles }: { angles: number[] }) {
+/* reads the EE marker world position each frame (throttled) for the readout */
+function EETracker({ targetRef, onPos }: {
+  targetRef: React.RefObject<THREE.Mesh>; onPos: (p: [number, number, number]) => void
+}) {
+  const v = useRef(new THREE.Vector3())
+  const last = useRef(0)
+  useFrame(({ clock }) => {
+    if (!targetRef.current) return
+    const t = clock.getElapsedTime()
+    if (t - last.current < 0.1) return
+    last.current = t
+    targetRef.current.getWorldPosition(v.current)
+    onPos([v.current.x, v.current.y, v.current.z])
+  })
+  return null
+}
+
+function RobotArm({ angles, eeRef, showLabels }: {
+  angles: number[]; eeRef?: React.RefObject<THREE.Mesh>; showLabels?: boolean
+}) {
   return (
     <group>
       <mesh position={[0, 0.05, 0]} receiveShadow castShadow>
@@ -51,7 +84,7 @@ function RobotArm({ angles }: { angles: number[] }) {
         <meshStandardMaterial color="#11161f" metalness={0.6} roughness={0.4} />
       </mesh>
       <group position={[0, 0.1, 0]}>
-        <ArmChain angles={angles} />
+        <ArmChain angles={angles} eeRef={eeRef} showLabels={showLabels} />
       </group>
     </group>
   )
@@ -84,6 +117,10 @@ export function Simulation() {
   const [frame, setFrame] = useState(0)
   const [playing, setPlaying] = useState(true)
   const [speed, setSpeed] = useState(1)
+  const [showLabels, setShowLabels] = useState(true)
+  const [compare, setCompare] = useState(false)
+  const [eePos, setEePos] = useState<[number, number, number]>([0, 0, 0])
+  const eeRef = useRef<THREE.Mesh>(null!)
   const count = traj?.count ?? 0
 
   // clamp frame when trajectory changes
@@ -130,8 +167,19 @@ export function Simulation() {
           <p className="text-sm font-bold text-slate-200">합성 데이터 기반 로봇 동작 시뮬레이션</p>
         </div>
         <div className="flex items-center gap-2 text-[10px]">
-          <span className="px-2 py-1 rounded-full border border-nvidia/30 text-nvidia bg-nvidia/5 font-bold">synthetic_v1.hdf5</span>
-          <span className="px-2 py-1 rounded-full border border-border text-slate-400 font-bold">7-DOF · obs[14]→act[7]</span>
+          <button
+            onClick={() => setShowLabels(v => !v)}
+            className={clsx('px-2 py-1 rounded-full border font-bold transition-colors',
+              showLabels ? 'border-nvidia/40 text-nvidia bg-nvidia/10' : 'border-border text-slate-500 hover:text-slate-300')}
+          >관절 라벨</button>
+          {traj?.has_rgb && (
+            <button
+              onClick={() => setCompare(v => !v)}
+              className={clsx('px-2 py-1 rounded-full border font-bold transition-colors',
+                compare ? 'border-cyan-400/40 text-cyan-300 bg-cyan-500/10' : 'border-border text-slate-500 hover:text-slate-300')}
+            >RGB 비교 뷰</button>
+          )}
+          <span className="hidden sm:inline px-2 py-1 rounded-full border border-border text-slate-400 font-bold">7-DOF · obs[14]→act[7]</span>
         </div>
       </div>
 
@@ -146,8 +194,10 @@ export function Simulation() {
 
       {!isError && (
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-4 min-h-0">
+          {/* viewport cell: 3D, or 3D + RGB side-by-side in compare mode */}
+          <div className="flex flex-col sm:flex-row gap-4 min-h-0">
           {/* 3D viewport */}
-          <div className="relative rounded-xl overflow-hidden border border-nvidia/25 bg-[#05080d] min-h-[360px]">
+          <div className="relative flex-1 rounded-xl overflow-hidden border border-nvidia/25 bg-[#05080d] min-h-[360px]">
             <div className="absolute top-2 left-3 z-10 flex items-center gap-1.5 pointer-events-none">
               <span className="w-2 h-2 rounded-full bg-nvidia animate-pulse" />
               <span className="text-[9px] font-bold text-nvidia/70 uppercase tracking-widest">Isaac Sim Playback · drag to orbit</span>
@@ -160,7 +210,8 @@ export function Simulation() {
               <ambientLight intensity={0.45} />
               <directionalLight position={[3, 5, 2]} intensity={1.15} castShadow shadow-mapSize={[1024, 1024]} />
               <directionalLight position={[-3, 2, -2]} intensity={0.35} color="#00d4ff" />
-              <RobotArm angles={joints} />
+              <RobotArm angles={joints} eeRef={eeRef} showLabels={showLabels} />
+              <EETracker targetRef={eeRef} onPos={setEePos} />
               <Grid args={[12, 12]} cellSize={0.5} cellColor="#16240c" sectionSize={2} sectionColor="#2d4417" infiniteGrid fadeDistance={14} fadeStrength={1.5} />
               <ContactShadows position={[0, 0.01, 0]} opacity={0.55} blur={2.2} scale={7} far={3} />
               <OrbitControls enablePan={false} minDistance={1.6} maxDistance={8} target={[0, 1.1, 0]} autoRotate={!playing} autoRotateSpeed={0.6} />
@@ -192,9 +243,26 @@ export function Simulation() {
             )}
           </div>
 
+          {/* RGB compare panel (side-by-side with 3D) */}
+          {compare && traj?.has_rgb && (
+            <div className="relative flex-1 rounded-xl overflow-hidden border border-cyan-400/30 bg-black min-h-[200px] sm:min-h-[360px] grid place-items-center">
+              <div className="absolute top-2 left-3 z-10 flex items-center gap-1.5 pointer-events-none">
+                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                <span className="text-[9px] font-bold text-cyan-300/80 uppercase tracking-widest">RGB Observation · 224×224 · sensor cam</span>
+              </div>
+              <img
+                src={`${apiBase}/dataset/frame?idx=${rgbIdx}`}
+                alt="synthetic RGB observation"
+                className="w-full h-full object-contain"
+                style={{ imageRendering: 'pixelated' }}
+              />
+            </div>
+          )}
+          </div>
+
           {/* telemetry side panel */}
           <div className="flex flex-col gap-3 overflow-y-auto">
-            {traj?.has_rgb && (
+            {traj?.has_rgb && !compare && (
               <div className="bg-panel border border-border rounded-xl p-3">
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-[9px] font-black uppercase tracking-wider text-muted">RGB Observation · 224×224</p>
@@ -210,6 +278,19 @@ export function Simulation() {
                 </div>
               </div>
             )}
+
+            {/* End-effector coordinate readout */}
+            <div className="bg-panel border border-border rounded-xl p-3">
+              <p className="text-[9px] font-black uppercase tracking-wider text-muted mb-2">End-Effector Pose (m)</p>
+              <div className="grid grid-cols-3 gap-2">
+                {(['X', 'Y', 'Z'] as const).map((ax, k) => (
+                  <div key={ax} className="rounded-lg bg-surface border border-border px-2 py-1.5 text-center">
+                    <p className="text-[8px] font-bold" style={{ color: ['#ef4444', '#22c55e', '#3b82f6'][k] }}>{ax}</p>
+                    <p className="text-[11px] font-black font-mono text-slate-200">{eePos[k].toFixed(3)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
 
             <div className="bg-panel border border-border rounded-xl p-3">
               <p className="text-[9px] font-black uppercase tracking-wider text-muted mb-2">Joint State · 7 DOF (rad)</p>
