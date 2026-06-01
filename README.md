@@ -62,54 +62,66 @@
 
 ## 디렉터리 구조
 
+3-계층(ML 파이프라인 · 백엔드 API · 프론트엔드)으로 구성됩니다.
+
 ```
 PhysicalAI/
-├── run.py                  # CLI 엔트리포인트
-├── configs/                # YAML 설정 파일
-│   ├── env.yaml
-│   ├── collector.yaml
-│   ├── il.yaml
-│   ├── rl.yaml
-│   └── export.yaml
-├── env/                    # Isaac 환경 래퍼
-│   ├── isaac_env.py
-│   ├── flat_obs_env.py
-│   ├── robot_loader.py
-│   ├── sensor.py
-│   └── task_registry.py
-├── collector/              # 데모 수집
-│   ├── dataset.py
-│   ├── teleop.py
-│   └── rollout.py
-├── trainer/
-│   ├── il/                 # Behavioral Cloning
-│   │   ├── bc_trainer.py
-│   │   ├── policy.py
-│   │   └── dataloader.py
-│   └── rl/                 # PPO / SAC (Stable-Baselines3)
-│       ├── ppo_trainer.py
-│       ├── sac_trainer.py
-│       └── reward_shaper.py
-├── export/                 # ONNX + HDF5 내보내기
-│   ├── policy_exporter.py
-│   └── dataset_builder.py
-├── api/                    # FastAPI 백엔드
-│   ├── main.py
-│   ├── event_bus.py
-│   ├── subprocess_runner.py
-│   └── routes/
-│       ├── pipeline.py     # POST /api/run/{stage}
-│       ├── logs.py         # GET /api/logs/stream (SSE)
-│       └── artifacts.py    # GET /api/artifacts, /api/demos, /api/config
-├── dashboard/              # React 대시보드 (Vite + Tailwind)
-│   └── src/
-│       ├── App.tsx
-│       ├── pages/          # Overview · Run · Training · Demos · Artifacts · Config
-│       ├── components/
-│       ├── hooks/
-│       └── api/
-└── tests/                  # pytest 단위 테스트
+│
+├─ run.py                  # 파이프라인 CLI 진입점 (env/collect/il/rl/export)
+├─ configs/                # 스테이지별 YAML 설정 (env·collector·il·rl·export)
+│
+├─ ◆ ML 파이프라인 (Python)
+│  ├─ env/                 # IsaacEnv(mock 지원)·FlatObsEnv·센서·로봇 로더
+│  ├─ collector/           # 데모 수집: dataset(HDF5)·rollout·teleop
+│  ├─ trainer/
+│  │   ├─ il/              # BC 학습: bc_trainer·dataloader·policy(MLP)
+│  │   └─ rl/              # 강화학습: ppo_trainer·sac_trainer·reward_shaper
+│  └─ export/              # policy_exporter(ONNX)·dataset_builder(HDF5)
+│
+├─ ◆ 백엔드 API (FastAPI)
+│  └─ api/
+│      ├─ main.py              # 앱·CORS
+│      ├─ subprocess_runner.py # run.py 서브프로세스 실행 + mock 모드
+│      ├─ event_bus.py         # SSE 팬아웃
+│      └─ routes/              # pipeline(/run·/status·/mode)·logs·artifacts
+│
+├─ ◆ 프론트엔드 (React + Vite + TS)
+│  └─ dashboard/src/
+│      ├─ pages/           # Overview(홈)·Run·Training·Demos·Artifacts·Config
+│      ├─ components/      # layout(TopBar·ModeToggle)·pipeline·monitoring·ui
+│      ├─ hooks/           # usePipeline·useSSELogs·useSSEMetrics
+│      └─ api/client.ts    # 백엔드 REST 클라이언트
+│
+├─ ◆ 데이터 (gitignore · 권장: OneDrive 밖 정션 → C:\physicalai-data\)
+│  ├─ demos/        # episode_*.hdf5
+│  ├─ checkpoints/  # il/*.pt · rl/*.zip
+│  └─ outputs/      # policy/*.onnx · dataset/*.hdf5
+│
+└─ ◆ 설정/배포
+   ├─ package.json            # 루트 런처(dev·backend·backend:real)
+   ├─ requirements.txt        # torch·h5py·sb3·onnx…
+   ├─ netlify.toml            # 프론트 배포(base=dashboard)
+   ├─ railway.toml·Dockerfile # 백엔드 배포
+   └─ ovrtx/                  # Omniverse 렌더 모듈
 ```
+
+### 실행 구조 (대시보드 ↔ 파이프라인)
+
+```
+┌─ 브라우저 ─────────────┐     ┌─ FastAPI :8000 ──────────┐     ┌─ run.py ───┐
+│ React Dashboard :5173  │     │ /api/run/{stage}         │     │ 서브프로세스 │
+│  · 스테이지 버튼         │─POST│ /api/mode (MOCK/REAL)    │────▶│ python      │
+│  · MOCK/REAL 토글       │◀SSE─│ /api/logs·metrics/stream │◀───│ run.py <s>  │
+│  · Live Log·차트        │     │ SubprocessRunner          │     └─────────────┘
+└────────────────────────┘     │  └ mock_mode 분기          │       │ 읽기/쓰기
+        Vite proxy /api ──▶8000 └───────────────────────────┘       ▼
+                                                              C:\physicalai-data\
+                                                            (demos·checkpoints·outputs)
+```
+
+- **ML 파이프라인** — `run.py` + env/collector/trainer/export, 실제 학습 로직
+- **백엔드 API** — 파이프라인을 서브프로세스로 실행, SSE로 로그·메트릭 중계, MOCK/REAL 모드 제어
+- **프론트엔드** — 시각화·제어 UI, Vite가 `/api/*`를 백엔드로 프록시
 
 ---
 
