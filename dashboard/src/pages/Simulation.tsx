@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, Grid, Trail, Html, Environment, Lightformer, MeshReflectorMaterial } from '@react-three/drei'
 import { clsx } from 'clsx'
 import * as THREE from 'three'
 import { api } from '../api/client'
+import { usePipelineMode, usePipelineStatus } from '../hooks/usePipeline'
 
 const NV = '#76b900'
 const LINK_LEN = [0.55, 0.6, 0.5, 0.45, 0.4, 0.32, 0.26]
@@ -140,12 +141,29 @@ function Bar({ label, value, max, color }: { label: string; value: number; max: 
 }
 
 export function Simulation() {
+  const qc = useQueryClient()
   const { data: traj, isLoading, isError } = useQuery({
     queryKey: ['trajectory'],
     queryFn: () => api.getTrajectory(240),
     refetchInterval: 10000,
     retry: false,
   })
+  const { data: mode } = usePipelineMode()
+  const { data: status } = usePipelineStatus()
+
+  // Pull fresh data into the 3D the moment a REAL pipeline stage finishes
+  // (running → idle): a REAL EXPORT regenerates synthetic_v1.hdf5, so the arm
+  // and RGB immediately reflect the new policy rollout.
+  const [dataVersion, setDataVersion] = useState(0)
+  const wasRunning = useRef(false)
+  useEffect(() => {
+    const running = !!status?.running
+    if (wasRunning.current && !running) {
+      qc.invalidateQueries({ queryKey: ['trajectory'] })
+      setDataVersion(v => v + 1)
+    }
+    wasRunning.current = running
+  }, [status?.running, qc])
 
   const [frame, setFrame] = useState(0)
   const [playing, setPlaying] = useState(true)
@@ -204,9 +222,25 @@ export function Simulation() {
     <div className="p-3 sm:p-5 flex flex-col gap-4 h-full min-h-0">
       {/* header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-muted">3D Robot Playback</p>
-          <p className="text-sm font-bold text-slate-200">합성 데이터 기반 로봇 동작 시뮬레이션</p>
+        <div className="flex items-center gap-3">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted">3D Robot Playback</p>
+            <p className="text-sm font-bold text-slate-200">합성 데이터 기반 로봇 동작 시뮬레이션</p>
+          </div>
+          {/* data-source: which pipeline mode produced the current dataset */}
+          {mode && (
+            <span className={clsx('text-[9px] font-black px-2 py-1 rounded-full border',
+              mode.mock ? 'border-emerald-600/40 text-emerald-400 bg-emerald-900/15'
+                        : 'border-amber-500/50 text-amber-300 bg-amber-900/15')}>
+              {mode.mock ? 'MOCK 파이프라인' : 'REAL 파이프라인'}
+            </span>
+          )}
+          {status?.running && (
+            <span className="text-[9px] font-bold px-2 py-1 rounded-full bg-nvidia/15 text-nvidia border border-nvidia/40 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-nvidia animate-pulse" />
+              {status.stage?.toUpperCase()} 실행 중
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2 text-[10px]">
           <button
@@ -317,7 +351,7 @@ export function Simulation() {
                 <span className="text-[9px] font-bold text-cyan-300/80 uppercase tracking-widest">RGB Observation · 224×224 · sensor cam</span>
               </div>
               <img
-                src={`${apiBase}/dataset/frame?idx=${rgbIdx}`}
+                src={`${apiBase}/dataset/frame?idx=${rgbIdx}&v=${dataVersion}`}
                 alt="synthetic RGB observation"
                 className="w-full h-full object-contain"
                 style={{ imageRendering: 'pixelated' }}
@@ -336,7 +370,7 @@ export function Simulation() {
                 </div>
                 <div className="rounded-lg overflow-hidden border border-nvidia/20 bg-black aspect-square">
                   <img
-                    src={`${apiBase}/dataset/frame?idx=${rgbIdx}`}
+                    src={`${apiBase}/dataset/frame?idx=${rgbIdx}&v=${dataVersion}`}
                     alt="synthetic RGB observation"
                     className="w-full h-full object-cover"
                     style={{ imageRendering: 'pixelated' }}
@@ -390,8 +424,9 @@ export function Simulation() {
 
             <div className="bg-panel border border-border rounded-xl p-3">
               <p className="text-[9px] text-slate-500 leading-relaxed">
-                <span className="text-nvidia font-bold">EXPORT</span> 단계에서 정책을 롤아웃해 생성한 합성 궤적(joint_state·action·reward)을
-                재생합니다. Unreal/Unity 연동 시 동일한 <span className="font-mono">joint_state[7]</span> 스트림을 본 로봇 리그에 그대로 매핑하면 됩니다.
+                {mode?.mock === false ? 'REAL' : 'MOCK'} 모드 <span className="text-nvidia font-bold">EXPORT</span>가 학습된 정책을 롤아웃해 만든 궤적
+                (joint_state·action·reward)으로 이 3D가 구동됩니다. REAL 파이프라인 실행이 끝나면 <span className="text-nvidia font-bold">자동 갱신</span>됩니다.
+                Unreal/Unity 연동 시 동일한 <span className="font-mono">joint_state[7]</span> 스트림을 본 로봇 리그에 매핑하면 됩니다.
               </p>
             </div>
           </div>
