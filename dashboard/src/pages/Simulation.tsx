@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { OrbitControls, Grid, ContactShadows, Trail, Html } from '@react-three/drei'
+import { OrbitControls, Grid, Trail, Html, Environment, Lightformer, MeshReflectorMaterial } from '@react-three/drei'
 import { clsx } from 'clsx'
 import * as THREE from 'three'
 import { api } from '../api/client'
@@ -21,6 +21,40 @@ function JointLabel({ text, color, show }: { text: string; color: string; show: 
   )
 }
 
+/* materials shared across the arm (industrial look) */
+const SHELL = { color: '#e9edf2', metalness: 0.55, roughness: 0.32 }     // light alloy link shell
+const HOUSING = { color: '#222a35', metalness: 0.9, roughness: 0.28 }    // dark machined joint housing
+const ACCENT = { color: NV, emissive: NV, emissiveIntensity: 0.45, metalness: 0.4, roughness: 0.4 }
+
+/* a joint motor housing oriented along the joint's rotation axis */
+function Knuckle({ axis }: { axis: 'x' | 'y' | 'z' }) {
+  const rot: [number, number, number] = axis === 'y' ? [0, 0, 0] : axis === 'x' ? [0, 0, Math.PI / 2] : [Math.PI / 2, 0, 0]
+  return (
+    <group rotation={rot}>
+      <mesh castShadow receiveShadow><cylinderGeometry args={[0.095, 0.095, 0.17, 28]} /><meshStandardMaterial {...HOUSING} /></mesh>
+      <mesh castShadow><cylinderGeometry args={[0.1, 0.1, 0.04, 28]} /><meshStandardMaterial {...ACCENT} /></mesh>
+      <mesh position={[0, 0.09, 0]}><cylinderGeometry args={[0.072, 0.072, 0.02, 24]} /><meshStandardMaterial color="#0c1018" metalness={0.7} roughness={0.5} /></mesh>
+      <mesh position={[0, -0.09, 0]}><cylinderGeometry args={[0.072, 0.072, 0.02, 24]} /><meshStandardMaterial color="#0c1018" metalness={0.7} roughness={0.5} /></mesh>
+    </group>
+  )
+}
+
+/* tapered link shell from this joint up to the next */
+function Link({ len }: { len: number }) {
+  return (
+    <group>
+      <mesh position={[0, len / 2, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.052, 0.062, len, 24]} />
+        <meshStandardMaterial {...SHELL} />
+      </mesh>
+      <mesh position={[0.045, len / 2, 0]} castShadow>
+        <boxGeometry args={[0.012, len * 0.82, 0.05]} />
+        <meshStandardMaterial color="#11161f" metalness={0.7} roughness={0.4} />
+      </mesh>
+    </group>
+  )
+}
+
 /* ── 3D articulated arm (recursive kinematic chain) ── */
 function ArmChain({ angles, eeRef, showLabels, i = 0 }: {
   angles: number[]; eeRef?: React.RefObject<THREE.Mesh>; showLabels?: boolean; i?: number
@@ -28,14 +62,16 @@ function ArmChain({ angles, eeRef, showLabels, i = 0 }: {
   if (i >= LINK_LEN.length) {
     return (
       <group>
-        <mesh castShadow><boxGeometry args={[0.16, 0.06, 0.16]} /><meshStandardMaterial color="#cbd5e1" metalness={0.6} roughness={0.3} /></mesh>
-        <mesh position={[0.07, 0.09, 0]} castShadow><boxGeometry args={[0.03, 0.16, 0.07]} /><meshStandardMaterial color={NV} metalness={0.4} roughness={0.4} /></mesh>
-        <mesh position={[-0.07, 0.09, 0]} castShadow><boxGeometry args={[0.03, 0.16, 0.07]} /><meshStandardMaterial color={NV} metalness={0.4} roughness={0.4} /></mesh>
+        {/* wrist flange + gripper */}
+        <mesh castShadow><cylinderGeometry args={[0.07, 0.07, 0.05, 24]} /><meshStandardMaterial {...HOUSING} /></mesh>
+        <mesh position={[0, 0.05, 0]} castShadow><cylinderGeometry args={[0.05, 0.05, 0.06, 20]} /><meshStandardMaterial {...SHELL} /></mesh>
+        <mesh position={[0.055, 0.13, 0]} rotation={[0, 0, -0.12]} castShadow><boxGeometry args={[0.022, 0.13, 0.06]} /><meshStandardMaterial color="#cfd6df" metalness={0.7} roughness={0.3} /></mesh>
+        <mesh position={[-0.055, 0.13, 0]} rotation={[0, 0, 0.12]} castShadow><boxGeometry args={[0.022, 0.13, 0.06]} /><meshStandardMaterial color="#cfd6df" metalness={0.7} roughness={0.3} /></mesh>
         {/* end-effector marker (ref tracked for trail + coordinate readout) */}
-        <Trail width={2.5} length={6} color={'#a3e635'} attenuation={(t) => t * t} decay={1}>
-          <mesh ref={eeRef} position={[0, 0.12, 0]}><sphereGeometry args={[0.045, 12, 12]} /><meshBasicMaterial color="#c4f06b" /></mesh>
+        <Trail width={2.2} length={5} color={'#a3e635'} attenuation={(t) => t * t} decay={1.2}>
+          <mesh ref={eeRef} position={[0, 0.185, 0]}><sphereGeometry args={[0.03, 14, 14]} /><meshBasicMaterial color="#c4f06b" /></mesh>
         </Trail>
-        <group position={[0, 0.12, 0]}><JointLabel text="EE" color="#c4f06b" show={!!showLabels} /></group>
+        <group position={[0, 0.2, 0]}><JointLabel text="EE" color="#c4f06b" show={!!showLabels} /></group>
       </group>
     )
   }
@@ -44,12 +80,9 @@ function ArmChain({ angles, eeRef, showLabels, i = 0 }: {
   const len = LINK_LEN[i]
   return (
     <group rotation={rot}>
-      <mesh castShadow><sphereGeometry args={[0.09, 20, 20]} /><meshStandardMaterial color="#1e2d10" emissive={NV} emissiveIntensity={0.18} metalness={0.4} roughness={0.4} /></mesh>
+      <Knuckle axis={AXES[i]} />
       <JointLabel text={`J${i}`} color={JOINT_COLORS[i]} show={!!showLabels} />
-      <mesh position={[0, len / 2, 0]} castShadow>
-        <cylinderGeometry args={[0.06, 0.052, len, 18]} />
-        <meshStandardMaterial color={i % 2 ? '#2a3344' : '#3a4a22'} metalness={0.55} roughness={0.35} />
-      </mesh>
+      <Link len={len} />
       <group position={[0, len, 0]}>
         <ArmChain angles={angles} eeRef={eeRef} showLabels={showLabels} i={i + 1} />
       </group>
@@ -66,7 +99,7 @@ function EETracker({ targetRef, onPos }: {
   useFrame(({ clock }) => {
     if (!targetRef.current) return
     const t = clock.getElapsedTime()
-    if (t - last.current < 0.1) return
+    if (t - last.current < 0.2) return
     last.current = t
     targetRef.current.getWorldPosition(v.current)
     onPos([v.current.x, v.current.y, v.current.z])
@@ -79,11 +112,11 @@ function RobotArm({ angles, eeRef, showLabels }: {
 }) {
   return (
     <group>
-      <mesh position={[0, 0.05, 0]} receiveShadow castShadow>
-        <cylinderGeometry args={[0.28, 0.34, 0.1, 32]} />
-        <meshStandardMaterial color="#11161f" metalness={0.6} roughness={0.4} />
-      </mesh>
-      <group position={[0, 0.1, 0]}>
+      {/* layered pedestal base */}
+      <mesh position={[0, 0.03, 0]} receiveShadow castShadow><cylinderGeometry args={[0.34, 0.4, 0.06, 40]} /><meshStandardMaterial color="#0d121b" metalness={0.7} roughness={0.45} /></mesh>
+      <mesh position={[0, 0.1, 0]} receiveShadow castShadow><cylinderGeometry args={[0.26, 0.3, 0.1, 40]} /><meshStandardMaterial {...HOUSING} /></mesh>
+      <mesh position={[0, 0.16, 0]} castShadow><cylinderGeometry args={[0.27, 0.27, 0.018, 40]} /><meshStandardMaterial {...ACCENT} /></mesh>
+      <group position={[0, 0.17, 0]}>
         <ArmChain angles={angles} eeRef={eeRef} showLabels={showLabels} />
       </group>
     </group>
@@ -144,8 +177,6 @@ export function Simulation() {
   }, [playing, speed, count])
 
   const joints = traj?.joints[frame] ?? new Array(7).fill(0)
-  const actions = traj?.actions[frame] ?? new Array(7).fill(0)
-  const reward = traj?.rewards[frame] ?? 0
 
   // Throttled synthetic RGB frame (~6 fps) synced to the actual dataset index
   const apiBase = (import.meta.env.VITE_API_URL ?? '') + '/api'
@@ -157,6 +188,17 @@ export function Simulation() {
     const id = setInterval(() => setRgbIdx(frameRef.current * (traj.stride || 1)), 150)
     return () => clearInterval(id)
   }, [traj])
+
+  // Telemetry numbers update at ~5fps (decoupled from the 24fps 3D) so the
+  // readouts stay legible instead of flickering every frame.
+  const [displayFrame, setDisplayFrame] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setDisplayFrame(frameRef.current), 200)
+    return () => clearInterval(id)
+  }, [])
+  const dJoints = traj?.joints[displayFrame] ?? new Array(7).fill(0)
+  const dActions = traj?.actions[displayFrame] ?? new Array(7).fill(0)
+  const dReward = traj?.rewards[displayFrame] ?? 0
 
   return (
     <div className="p-3 sm:p-5 flex flex-col gap-4 h-full min-h-0">
@@ -205,16 +247,40 @@ export function Simulation() {
             <div className="absolute top-2 right-3 z-10 text-[9px] font-mono text-slate-500 pointer-events-none">
               frame {frame + 1} / {count}
             </div>
-            <Canvas shadows camera={{ position: [2.4, 1.9, 2.8], fov: 45 }} dpr={[1, 2]}>
-              <color attach="background" args={['#05080d']} />
-              <ambientLight intensity={0.45} />
-              <directionalLight position={[3, 5, 2]} intensity={1.15} castShadow shadow-mapSize={[1024, 1024]} />
-              <directionalLight position={[-3, 2, -2]} intensity={0.35} color="#00d4ff" />
+            <Canvas shadows camera={{ position: [2.8, 2.0, 3.2], fov: 42 }} dpr={[1, 2]} gl={{ antialias: true }}>
+              <color attach="background" args={['#070b12']} />
+              <fog attach="fog" args={['#070b12', 7, 20]} />
+              <hemisphereLight intensity={0.28} color="#cfe8ff" groundColor="#0a0e08" />
+              <ambientLight intensity={0.12} />
+              <directionalLight position={[5, 8, 4]} intensity={1.4} castShadow shadow-mapSize={[2048, 2048]} shadow-bias={-0.0001}>
+                <orthographicCamera attach="shadow-camera" args={[-3, 3, 3, -3, 0.1, 20]} />
+              </directionalLight>
+              <directionalLight position={[-6, 3, -5]} intensity={0.6} color="#00d4ff" />
+              <pointLight position={[0, 0.5, 0]} intensity={0.6} color="#76b900" distance={3.5} />
+
+              {/* local light-probe environment (no network) for metal reflections */}
+              <Environment resolution={256} frames={1}>
+                <Lightformer intensity={2.2} position={[0, 5, 3]} scale={[8, 8, 1]} color="#ffffff" />
+                <Lightformer intensity={1.0} position={[-5, 2, -4]} scale={[5, 5, 1]} color="#00d4ff" />
+                <Lightformer intensity={0.7} position={[5, 1, 3]} scale={[4, 4, 1]} color="#76b900" />
+              </Environment>
+
               <RobotArm angles={joints} eeRef={eeRef} showLabels={showLabels} />
               <EETracker targetRef={eeRef} onPos={setEePos} />
-              <Grid args={[12, 12]} cellSize={0.5} cellColor="#16240c" sectionSize={2} sectionColor="#2d4417" infiniteGrid fadeDistance={14} fadeStrength={1.5} />
-              <ContactShadows position={[0, 0.01, 0]} opacity={0.55} blur={2.2} scale={7} far={3} />
-              <OrbitControls enablePan={false} minDistance={1.6} maxDistance={8} target={[0, 1.1, 0]} autoRotate={!playing} autoRotateSpeed={0.6} />
+
+              {/* reflective floor for spatial depth */}
+              <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+                <planeGeometry args={[50, 50]} />
+                <MeshReflectorMaterial
+                  resolution={512} mixBlur={1} mixStrength={18} blur={[200, 60]}
+                  roughness={0.85} depthScale={1.1} minDepthThreshold={0.3} maxDepthThreshold={1.3}
+                  color="#070b12" metalness={0.7} mirror={0.4}
+                />
+              </mesh>
+              {/* subtle tech grid above the floor */}
+              <Grid args={[24, 24]} cellSize={0.5} cellColor="#12200a" sectionSize={2} sectionColor="#223617" position={[0, 0.001, 0]} fadeDistance={18} fadeStrength={2} infiniteGrid />
+
+              <OrbitControls enablePan={false} minDistance={1.8} maxDistance={9} target={[0, 1.15, 0]} autoRotate={!playing} autoRotateSpeed={0.5} />
             </Canvas>
 
             {/* transport controls */}
@@ -295,7 +361,7 @@ export function Simulation() {
             <div className="bg-panel border border-border rounded-xl p-3">
               <p className="text-[9px] font-black uppercase tracking-wider text-muted mb-2">Joint State · 7 DOF (rad)</p>
               <div className="flex flex-col gap-1.5">
-                {joints.slice(0, 7).map((v, i) => (
+                {dJoints.slice(0, 7).map((v, i) => (
                   <Bar key={i} label={`J${i}`} value={v} max={0.8} color={JOINT_COLORS[i]} />
                 ))}
               </div>
@@ -304,7 +370,7 @@ export function Simulation() {
             <div className="bg-panel border border-border rounded-xl p-3">
               <p className="text-[9px] font-black uppercase tracking-wider text-muted mb-2">Policy Action · 7 DOF</p>
               <div className="flex flex-col gap-1.5">
-                {actions.slice(0, 7).map((v, i) => (
+                {dActions.slice(0, 7).map((v, i) => (
                   <Bar key={i} label={`A${i}`} value={v} max={1.0} color={JOINT_COLORS[i]} />
                 ))}
               </div>
@@ -313,7 +379,7 @@ export function Simulation() {
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-panel border border-border rounded-xl p-3 flex flex-col gap-0.5">
                 <p className="text-[9px] font-black uppercase tracking-wider text-muted">Reward</p>
-                <p className="text-xl font-black font-mono" style={{ color: reward >= 0 ? NV : '#ef4444' }}>{reward.toFixed(3)}</p>
+                <p className="text-xl font-black font-mono" style={{ color: dReward >= 0 ? NV : '#ef4444' }}>{dReward.toFixed(3)}</p>
               </div>
               <div className="bg-panel border border-border rounded-xl p-3 flex flex-col gap-0.5">
                 <p className="text-[9px] font-black uppercase tracking-wider text-muted">Frames</p>
