@@ -21,6 +21,7 @@ export interface DemoFile {
 export type ConfigMap = Record<string, unknown>
 
 export interface Trajectory {
+  name: string
   n_total: number
   stride: number
   count: number
@@ -52,5 +53,6 @@ export const api = {
   artifactDownloadUrl: (id: string) => `${BASE}/artifacts/${id}/download`,
   getDemos: () => _fetch<DemoFile[]>('/demos'),
   getConfig: () => _fetch<ConfigMap>('/config'),
-  getTrajectory: (frames = 240) => _fetch<Trajectory>(`/dataset/trajectory?frames=${frames}`),
+  getTrajectory: (name = 'synthetic_v1', frames = 240) =>
+    _fetch<Trajectory>(`/dataset/trajectory?name=${encodeURIComponent(name)}&frames=${frames}`),
 }

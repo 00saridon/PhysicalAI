@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../api/client'
 import type { DemoFile } from '../api/client'
 import { usePipelineStatus, useRunStage } from '../hooks/usePipeline'
+import { MODELS, MODEL_ICON, simSelection } from '../sim/models'
+import type { NavPage } from '../App'
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -32,7 +34,7 @@ function EpisodeRow({ demo }: { demo: DemoFile }) {
   )
 }
 
-export function Demos() {
+export function Demos({ onNav }: { onNav?: (p: NavPage) => void }) {
   const { data: demos = [], isLoading } = useQuery({
     queryKey: ['demos'],
     queryFn: api.getDemos,
@@ -43,8 +45,39 @@ export function Demos() {
 
   const totalSize = demos.reduce((s, d) => s + d.size_bytes, 0)
 
+  const openInSim = (id: string) => { simSelection.id = id; onNav?.('Simulation') }
+
   return (
     <div className="p-5 flex flex-col gap-4">
+      {/* Robot model gallery (Isaac Lab showroom) */}
+      <div className="bg-panel border border-border rounded-xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-muted">Robot Model Gallery</p>
+            <p className="text-sm font-bold text-slate-200 mt-0.5">Isaac Lab 쇼룸 모델 · 클릭하면 3D 시뮬레이션</p>
+          </div>
+          <span className="text-[10px] px-2.5 py-1 rounded-full border border-nvidia/30 text-nvidia bg-nvidia/5 font-bold">{MODELS.length} models</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {MODELS.map(m => (
+            <button key={m.id} onClick={() => openInSim(m.id)}
+              className="group rounded-xl border border-border bg-surface hover:border-nvidia/50 hover:bg-nvidia/5 p-3 flex flex-col gap-1.5 text-left transition-all">
+              <div className="flex items-center justify-between">
+                <span className="text-2xl leading-none">{MODEL_ICON[m.id] ?? '🤖'}</span>
+                <span className={`text-[8px] font-black px-1.5 py-0.5 rounded ${m.dataDriven ? 'bg-nvidia/15 text-nvidia' : 'bg-slate-800 text-slate-500'}`}>
+                  {m.dataDriven ? 'DATA' : 'PROC'}
+                </span>
+              </div>
+              <div>
+                <p className="text-[11px] font-bold text-slate-200 leading-tight group-hover:text-nvidia">{m.name}</p>
+                <p className="text-[8px] text-muted">{m.category} · {m.dof} DOF</p>
+              </div>
+              <p className="text-[8px] text-nvidia/70 font-bold opacity-0 group-hover:opacity-100 transition-opacity">3D 보기 →</p>
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* 헤더 */}
       <div className="flex items-center justify-between">
         <div>

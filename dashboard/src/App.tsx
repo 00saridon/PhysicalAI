@@ -14,12 +14,12 @@ import { usePipelineStatus, useRunStage, usePipelineMode, useSetMode } from './h
 
 export type NavPage = 'Overview' | 'Run' | 'Training' | 'Demos' | 'Simulation' | 'Artifacts' | 'Config'
 
-function PageContent({ page }: { page: NavPage }) {
+function PageContent({ page, onNav }: { page: NavPage; onNav: (p: NavPage) => void }) {
   switch (page) {
     case 'Overview':   return <Overview />
     case 'Run':        return <Run />
     case 'Training':   return <Training />
-    case 'Demos':      return <Demos />
+    case 'Demos':      return <Demos onNav={onNav} />
     case 'Simulation': return (
       <Suspense fallback={<div className="p-8 text-sm text-muted">3D 뷰 로딩 중…</div>}>
         <Simulation />
@@ -86,7 +86,7 @@ export default function App() {
           modePending={modePending}
         />
         <div ref={scrollRef} className="flex-1 overflow-y-auto">
-          <PageContent page={page} />
+          <PageContent page={page} onNav={handleNav} />
         </div>
       </div>
     </div>

@@ -6,10 +6,9 @@ import { clsx } from 'clsx'
 import * as THREE from 'three'
 import { api } from '../api/client'
 import { usePipelineMode, usePipelineStatus } from '../hooks/usePipeline'
-import { MODELS, EETracker, JOINT_COLORS } from '../sim/models'
+import { MODELS, MODEL_ICON, EETracker, JOINT_COLORS, simSelection } from '../sim/models'
 
 const NV = '#76b900'
-const MODEL_ICON: Record<string, string> = { arm: '🦾', quadruped: '🐾', humanoid: '🧍', quadcopter: '🚁' }
 
 function Bar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
   const pct = Math.min(100, (Math.abs(value) / max) * 100)
@@ -29,19 +28,22 @@ function Bar({ label, value, max, color }: { label: string; value: number; max: 
 
 export function Simulation() {
   const qc = useQueryClient()
-  const { data: traj, isError } = useQuery({
-    queryKey: ['trajectory'],
-    queryFn: () => api.getTrajectory(240),
-    refetchInterval: 10000,
-    retry: false,
-  })
   const { data: mode } = usePipelineMode()
   const { data: status } = usePipelineStatus()
 
-  // selected robot model (Isaac Lab showroom-style library)
-  const [modelId, setModelId] = useState('arm')
+  // selected robot model (Isaac Lab showroom-style library; Demos can deep-link)
+  const [modelId, setModelId] = useState(() => simSelection.id)
   const model = MODELS.find(m => m.id === modelId) ?? MODELS[0]
   const Model = model.Component
+
+  // load the selected model's trajectory (only for models that have a dataset)
+  const { data: traj, isError } = useQuery({
+    queryKey: ['trajectory', model.dataset ?? null],
+    queryFn: () => api.getTrajectory(model.dataset ?? 'synthetic_v1', 240),
+    enabled: !!model.dataset,
+    refetchInterval: 10000,
+    retry: false,
+  })
 
   // pull fresh data into the (data-driven) model when a REAL stage finishes
   const [dataVersion, setDataVersion] = useState(0)
@@ -101,10 +103,13 @@ export function Simulation() {
   const dActions = traj?.actions[displayFrame] ?? new Array(7).fill(0)
   const dReward = traj?.rewards[displayFrame] ?? 0
 
-  const dataDriven = model.dataDriven
-  const showTelemetry = dataDriven && !isError
-  const showRgbCard = dataDriven && !!traj?.has_rgb && !compare && !isError
-  const showCompare = dataDriven && compare && !!traj?.has_rgb && !isError
+  const wantsData = model.dataDriven
+  const hasData = !!traj && !isError
+  const effDataDriven = wantsData && hasData
+  const dataDriven = effDataDriven
+  const showTelemetry = effDataDriven
+  const showRgbCard = effDataDriven && !!traj?.has_rgb && !compare
+  const showCompare = effDataDriven && compare && !!traj?.has_rgb
 
   return (
     <div className="p-3 sm:p-5 flex flex-col gap-3 h-full min-h-0">
@@ -147,7 +152,7 @@ export function Simulation() {
       {/* model library selector (add models in src/sim/models.tsx) */}
       <div className="flex flex-wrap gap-2">
         {MODELS.map(m => (
-          <button key={m.id} onClick={() => { setModelId(m.id); setCompare(false) }}
+          <button key={m.id} onClick={() => { setModelId(m.id); simSelection.id = m.id; setCompare(false) }}
             className={clsx('flex items-center gap-2.5 pl-2.5 pr-3 py-1.5 rounded-lg border text-left transition-all',
               m.id === modelId ? 'border-nvidia/50 bg-nvidia/10 shadow-sm shadow-nvidia/10' : 'border-border bg-panel hover:border-slate-600')}>
             <span className="text-lg leading-none">{MODEL_ICON[m.id] ?? '🤖'}</span>
@@ -187,7 +192,7 @@ export function Simulation() {
                 <Lightformer intensity={0.7} position={[5, 1, 3]} scale={[4, 4, 1]} color="#76b900" />
               </Environment>
 
-              <Model joints={joints} phase={phase} playing={playing} speed={speed} showLabels={showLabels} eeRef={eeRef} />
+              <Model joints={joints} phase={phase} playing={playing} speed={speed} dataDriven={effDataDriven} showLabels={showLabels} eeRef={eeRef} />
               {showTelemetry && <EETracker targetRef={eeRef} onPos={setEePos} />}
 
               <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
@@ -228,7 +233,7 @@ export function Simulation() {
                 <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
                 <span className="text-[9px] font-bold text-cyan-300/80 uppercase tracking-widest">RGB Observation · 224×224</span>
               </div>
-              <img src={`${apiBase}/dataset/frame?idx=${rgbIdx}&v=${dataVersion}`} alt="synthetic RGB observation"
+              <img src={`${apiBase}/dataset/frame?idx=${rgbIdx}&v=${dataVersion}&name=${model.dataset ?? 'synthetic_v1'}`} alt="synthetic RGB observation"
                 className="w-full h-full object-contain" style={{ imageRendering: 'pixelated' }} />
             </div>
           )}
@@ -255,7 +260,7 @@ export function Simulation() {
                 <span className="text-[8px] font-mono text-slate-500">sensor cam</span>
               </div>
               <div className="rounded-lg overflow-hidden border border-nvidia/20 bg-black aspect-square">
-                <img src={`${apiBase}/dataset/frame?idx=${rgbIdx}&v=${dataVersion}`} alt="synthetic RGB observation"
+                <img src={`${apiBase}/dataset/frame?idx=${rgbIdx}&v=${dataVersion}&name=${model.dataset ?? 'synthetic_v1'}`} alt="synthetic RGB observation"
                   className="w-full h-full object-cover" style={{ imageRendering: 'pixelated' }} />
               </div>
             </div>
@@ -302,8 +307,8 @@ export function Simulation() {
             <div className="bg-panel border border-border rounded-xl p-3">
               <p className="text-[9px] font-black uppercase tracking-wider text-muted mb-1">Showroom · Procedural</p>
               <p className="text-[10px] text-slate-500 leading-relaxed">
-                {isError && dataDriven
-                  ? '합성 데이터셋이 없습니다 — EXPORT 실행 후 표시됩니다.'
+                {wantsData && !hasData
+                  ? '이 모델의 데이터셋이 없습니다 — EXPORT 실행 또는 outputs/dataset에 추가하면 정책 궤적으로 구동됩니다.'
                   : '이 모델은 Isaac Lab 쇼룸 스타일의 절차적 애니메이션으로 동작을 시연합니다. 재생/속도 컨트롤로 모션을 조절하세요. 실제 정책 궤적은 7-DOF Manipulator 모델에서 재생됩니다.'}
               </p>
             </div>

@@ -227,7 +227,8 @@ foreach ($d in 'demos','checkpoints','outputs') { cmd /c mklink /J ".\$d" "C:\ph
 
 ## 대시보드 페이지
 
-> UI 화면 구성과 동작 흐름(워크플로우·상태 머신·API)은 **[docs/UI-FLOW.md](docs/UI-FLOW.md)** 에 체계적으로 정리되어 있습니다.
+> UI 화면 구성과 동작 흐름(워크플로우·상태 머신·API)은 **[docs/UI-FLOW.md](docs/UI-FLOW.md)** 에 정리되어 있습니다.
+> Simulation의 로봇 모델 라이브러리와 Isaac Lab 에셋/실데이터 연동·Unreal/Unity 매핑은 **[docs/ISAACLAB-ASSETS.md](docs/ISAACLAB-ASSETS.md)** 를 참고하세요.
 
 | 메뉴 | 기능 |
 |---|---|
