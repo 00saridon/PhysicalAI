@@ -21,3 +21,7 @@ demo_shots/
 dump_dom.py
 make_preview.py
 readme_preview.html
+
+# embedded native module repo (installed from PyPI as `ovrtx`); was an
+# accidental gitlink that broke CI submodule init
+ovrtx/
