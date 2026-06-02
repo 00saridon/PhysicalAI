@@ -12,7 +12,12 @@ app.state.runner = SubprocessRunner()
 
 # CORS: 로컬 개발 + Netlify 프로덕션(프리뷰 포함) 허용
 # ALLOWED_ORIGINS 환경변수로 추가 도메인 지정 가능 (쉼표 구분)
-_default_origins = ["http://localhost:5173", "http://localhost:4173"]
+_default_origins = [
+    "http://localhost:5173", "http://localhost:4173",
+    # 127.0.0.1 is a distinct origin from localhost for CORS — allow both so
+    # `vite preview --host 127.0.0.1` and direct-IP access work locally too.
+    "http://127.0.0.1:5173", "http://127.0.0.1:4173",
+]
 _extra = os.getenv("ALLOWED_ORIGINS", "")
 _origins = _default_origins + [o.strip() for o in _extra.split(",") if o.strip()]
 
