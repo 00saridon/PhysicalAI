@@ -41,25 +41,33 @@ Simulation의 쇼룸 모델을 **실제 Isaac Lab 로봇/정책 데이터로 구
 | `reward` | `[T]` | – | 스텝 리워드 |
 | `rgb` | `[T, H, W, 3]` uint8 | – | 센서 관측(있으면 RGB 패널 표시) |
 
-Isaac Lab에서 정책을 롤아웃하며 `joint_state`를 저장하는 예시:
+**정식 익스포터**(`scripts/export_isaaclab_dataset.py`)를 Isaac Sim + Isaac Lab 머신에서 실행합니다.
+정책을 롤아웃하며 `joint_state`(+action/reward)를 대시보드 스키마로 저장합니다.
 
-```python
-import h5py, numpy as np
-# env: Isaac Lab ManagerBasedRLEnv (예: Isaac-Velocity-Rough-Anymal-D-v0)
-obs, _ = env.reset()
-js, act, rew = [], [], []
-for _ in range(600):
-    a = policy(obs)                          # 학습된 정책
-    obs, r, term, trunc, _ = env.step(a)
-    js.append(env.scene["robot"].data.joint_pos[0].cpu().numpy())   # [DOF]
-    act.append(a[0].cpu().numpy()); rew.append(float(r[0]))
-with h5py.File("outputs/dataset/anymal_v1.hdf5", "w") as f:
-    f.create_dataset("joint_state", data=np.asarray(js, np.float32))
-    f.create_dataset("action", data=np.asarray(act, np.float32))
-    f.create_dataset("reward", data=np.asarray(rew, np.float32))
+```bash
+# ANYmal-D 보행 (랜덤 정책) → outputs/dataset/anymal_v1.hdf5
+python scripts/export_isaaclab_dataset.py --task Isaac-Velocity-Flat-Anymal-D-v0 --name anymal_v1 --steps 600
+# Franka reach (학습 체크포인트)
+python scripts/export_isaaclab_dataset.py --task Isaac-Reach-Franka-v0 --name synthetic_v1 --steps 400 --checkpoint policy.pt
 ```
 
-백엔드는 `GET /api/dataset/trajectory?name=anymal_v1` 로 이 파일을 strided 슬라이스해 제공합니다.
+| 모델(dataset) | Isaac Lab task (버전마다 명칭 상이) |
+|---|---|
+| `synthetic_v1` (Franka) | `Isaac-Reach-Franka-v0` / `Isaac-Lift-Cube-Franka-v0` |
+| `anymal_v1` | `Isaac-Velocity-Flat-Anymal-D-v0` / `-Rough-` |
+| `spot_v1` | `Isaac-Velocity-Flat-Spot-v0` |
+| `h1_v1` | `Isaac-Velocity-Rough-H1-v0` / `-Flat-` |
+| `g1_v1` | `Isaac-Velocity-Rough-G1-v0` / `-Flat-` |
+| `crazyflie_v1` | `Isaac-Quadcopter-Direct-v0` |
+
+> 관절 순서가 리그와 다르면 `--reorder "1,4,7,10,2,5,8,11,0,3,6,9"`로 재정렬합니다
+> (원본 순서는 `env.scene["robot"].joint_names`로 확인). 백엔드는
+> `GET /api/dataset/trajectory?name=<name>` 로 이 파일을 strided 제공합니다.
+
+**적용 경로**
+- **로컬**: 생성된 `outputs/dataset/<name>.hdf5`가 곧바로 사용됩니다(시드는 기존 파일을 덮어쓰지 않음).
+- **클라우드(Railway)**: 작게 다운샘플한 실데이터 HDF5를 **`assets/datasets/<name>.hdf5`** 에 커밋하면
+  Dockerfile이 빌드 시 `outputs/dataset/`로 복사해(시드보다 우선) 라이브에 반영합니다.
 
 ---
 
