@@ -1,9 +1,8 @@
 import type { Artifact, PipelineStatus, StageId } from '../types/pipeline'
-
-const BASE = (import.meta.env.VITE_API_URL ?? '') + '/api'
+import { getApiBase } from './base'
 
 async function _fetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, init)
+  const res = await fetch(`${getApiBase()}${path}`, init)
   if (!res.ok) {
     const body = await res.text()
     throw new Error(`${res.status} ${res.statusText}: ${body}`)
@@ -51,7 +50,7 @@ export const api = {
       body: JSON.stringify({ mock }),
     }),
   getArtifacts: () => _fetch<Artifact[]>('/artifacts'),
-  artifactDownloadUrl: (id: string) => `${BASE}/artifacts/${id}/download`,
+  artifactDownloadUrl: (id: string) => `${getApiBase()}/artifacts/${id}/download`,
   getDemos: () => _fetch<DemoFile[]>('/demos'),
   getConfig: () => _fetch<ConfigMap>('/config'),
   getTrajectory: (name = 'synthetic_v1', frames = 240) =>

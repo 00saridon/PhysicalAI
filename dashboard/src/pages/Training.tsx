@@ -5,6 +5,7 @@ import { LogPanel } from '../components/monitoring/LogPanel'
 import { useSSELogs } from '../hooks/useSSELogs'
 import { useSSEMetrics } from '../hooks/useSSEMetrics'
 import { usePipelineStatus } from '../hooks/usePipeline'
+import { getApiBase } from '../api/base'
 import type { NavPage } from '../App'
 
 type Metric = 'rew_mean' | 'loss'
@@ -15,9 +16,9 @@ const METRIC_STAGES = new Set(['il', 'rl'])
 export function Training({ onNav }: { onNav?: (p: NavPage) => void }) {
   const [metric, setMetric] = useState<Metric>('rew_mean')
   const { data: status } = usePipelineStatus()
-  // use VITE_API_URL like Overview/Run so SSE streams direct to the backend
+  // resolve the backend like Overview/Run so SSE streams direct to it
   // (avoids the Netlify proxy buffering edge case in production)
-  const apiBase = (import.meta.env.VITE_API_URL ?? '') + '/api'
+  const apiBase = getApiBase()
   const { lines, connected } = useSSELogs(`${apiBase}/logs/stream`)
   const { points, connected: metricsLive } = useSSEMetrics(`${apiBase}/metrics/stream`)
 

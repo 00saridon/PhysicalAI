@@ -3,6 +3,7 @@ import type { Stage } from '../types/pipeline'
 import { PipelineBar } from '../components/pipeline/PipelineBar'
 import { usePipelineStatus, useRunStage, useStopStage } from '../hooks/usePipeline'
 import { useSSELogs } from '../hooks/useSSELogs'
+import { getApiBase } from '../api/base'
 
 // _fetch throws "<status> <statusText>: <body>" where body is FastAPI's
 // {"detail": "..."}. Pull the human-readable detail out for the error banner.
@@ -38,7 +39,7 @@ export function Run() {
   const { data: status } = usePipelineStatus()
   const { mutate: runStage, isPending, error, reset } = useRunStage()
   const { mutate: stopStage, isPending: isStopping } = useStopStage()
-  const apiBase = (import.meta.env.VITE_API_URL ?? '') + '/api'
+  const apiBase = getApiBase()
   // When a stage finishes/fails the server emits a terminal SSE event; refetch
   // status immediately instead of waiting up to 2s for the next poll.
   const { lines, connected } = useSSELogs(`${apiBase}/logs/stream`, () =>

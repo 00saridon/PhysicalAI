@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import { api } from '../api/client'
 import type { ConfigMap } from '../api/client'
+import { getApiRoot, getApiOverride, setApiOverride } from '../api/base'
 
 function renderValue(val: unknown, depth = 0): React.ReactNode {
   if (val === null || val === undefined) return <span className="text-slate-600">null</span>
@@ -46,6 +47,13 @@ export function Config() {
     staleTime: 30_000,
   })
 
+  const [backendInput, setBackendInput] = useState<string>(getApiOverride() ?? '')
+  const activeRoot = getApiRoot()
+  const applyBackend = () => {
+    setApiOverride(backendInput)
+    window.location.reload()  // re-resolve API base + reconnect SSE against the new backend
+  }
+
   const keys = Object.keys(config)
   const [active, setActive] = useState<string>('')
   const selectedKey = active || keys[0] || ''
@@ -56,6 +64,37 @@ export function Config() {
       <div>
         <h2 className="text-sm font-bold text-slate-200">Configuration</h2>
         <p className="text-xs text-muted mt-0.5">configs/ 디렉터리의 YAML 파일을 읽기 전용으로 표시합니다</p>
+      </div>
+
+      {/* Backend override — point the dashboard at an ad-hoc backend (e.g. a
+          Colab GPU exposed via cloudflared) without rebuilding. */}
+      <div className="bg-panel border border-border rounded-xl p-4 flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-bold text-slate-200">Backend (API)</p>
+          <span className="text-[10px] font-mono text-muted truncate max-w-[60%]" title={activeRoot || '(same origin)'}>
+            현재: {activeRoot || '(기본/동일 출처)'}
+          </span>
+        </div>
+        <div className="flex gap-2">
+          <input
+            value={backendInput}
+            onChange={e => setBackendInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') applyBackend() }}
+            placeholder="https://<tunnel>.trycloudflare.com  (비우면 기본값)"
+            className="flex-1 bg-[#0d1117] border border-border rounded-md px-3 py-1.5 text-xs font-mono text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500"
+          />
+          <button
+            onClick={applyBackend}
+            className="text-xs font-bold px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white transition-colors whitespace-nowrap"
+          >적용 (새로고침)</button>
+          <button
+            onClick={() => { setApiOverride(''); window.location.reload() }}
+            className="text-xs font-bold px-3 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors whitespace-nowrap"
+          >초기화</button>
+        </div>
+        <p className="text-[10px] text-muted">
+          Colab GPU 백엔드의 cloudflared URL을 붙여넣으면 Run/Training이 그 GPU에서 실행됩니다. <code className="text-slate-400">?api=&lt;url&gt;</code> 쿼리로도 설정 가능.
+        </p>
       </div>
 
       {isLoading ? (

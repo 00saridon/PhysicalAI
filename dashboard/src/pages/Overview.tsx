@@ -1,6 +1,7 @@
 import { clsx } from 'clsx'
 import type { Stage, Artifact, MetricPoint } from '../types/pipeline'
 import type { DemoFile, ConfigMap } from '../api/client'
+import { getApiBase } from '../api/base'
 import { PipelineBar } from '../components/pipeline/PipelineBar'
 import { LogPanel } from '../components/monitoring/LogPanel'
 import { RewardChart } from '../components/monitoring/RewardChart'
@@ -1046,7 +1047,7 @@ export function Overview() {
   const { data: config = {} } = useConfig()
   const { data: mode } = usePipelineMode()
   const { mutate: runStage } = useRunStage()
-  const apiBase = (import.meta.env.VITE_API_URL ?? '') + '/api'
+  const apiBase = getApiBase()
   const { lines, connected } = useSSELogs(`${apiBase}/logs/stream`)
   const { points } = useSSEMetrics(`${apiBase}/metrics/stream`)
 

@@ -5,6 +5,7 @@ import { OrbitControls, Grid, Environment, Lightformer, MeshReflectorMaterial } 
 import { clsx } from 'clsx'
 import * as THREE from 'three'
 import { api } from '../api/client'
+import { getApiBase } from '../api/base'
 import { usePipelineMode, usePipelineStatus } from '../hooks/usePipeline'
 import { MODELS, MODEL_ICON, EETracker, JOINT_COLORS, simSelection } from '../sim/models'
 
@@ -84,7 +85,7 @@ export function Simulation() {
   const joints = traj?.joints[frame] ?? new Array(7).fill(0)
   const phase = count ? frame / count : 0
 
-  const apiBase = (import.meta.env.VITE_API_URL ?? '') + '/api'
+  const apiBase = getApiBase()
   const frameRef = useRef(0)
   frameRef.current = frame
   const [rgbIdx, setRgbIdx] = useState(0)

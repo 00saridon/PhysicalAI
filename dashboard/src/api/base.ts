@@ -1,0 +1,65 @@
+// Runtime-configurable API backend.
+//
+// Resolution order for the backend root (no trailing /api):
+//   1. ?api=<url> query param — captured once and persisted to localStorage
+//      (clears the override when passed empty: ?api=)
+//   2. localStorage override (set by a previous ?api= or the Config page)
+//   3. VITE_API_URL baked at build time (Netlify → Railway)
+//   4. '' (relative — same origin / Vite dev proxy)
+//
+// This lets the deployed dashboard point at an ad-hoc backend (e.g. a Colab
+// GPU instance exposed via a cloudflared tunnel) WITHOUT a rebuild — just open
+//   https://<site>/?api=https://<tunnel>.trycloudflare.com
+
+const KEY = 'physicalai.apiUrl'
+
+function stripTrailingSlash(s: string): string {
+  return s.replace(/\/+$/, '')
+}
+
+function readOverride(): string | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const q = new URLSearchParams(window.location.search).get('api')
+    if (q !== null) {
+      if (q === '') localStorage.removeItem(KEY)
+      else localStorage.setItem(KEY, stripTrailingSlash(q))
+    }
+    return localStorage.getItem(KEY)
+  } catch {
+    return null
+  }
+}
+
+/** Backend root with no trailing slash, e.g. "https://host" or "". */
+export function getApiRoot(): string {
+  const override = readOverride()
+  if (override) return override
+  return stripTrailingSlash((import.meta.env.VITE_API_URL as string | undefined) ?? '')
+}
+
+/** Backend API base including the /api prefix. */
+export function getApiBase(): string {
+  return getApiRoot() + '/api'
+}
+
+/** Persist (or clear, when empty) a backend override at runtime. */
+export function setApiOverride(url: string): void {
+  try {
+    const trimmed = stripTrailingSlash(url.trim())
+    if (trimmed) localStorage.setItem(KEY, trimmed)
+    else localStorage.removeItem(KEY)
+  } catch {
+    /* ignore storage failures */
+  }
+}
+
+/** The active override, or null when falling back to the build-time default. */
+export function getApiOverride(): string | null {
+  if (typeof window === 'undefined') return null
+  try {
+    return localStorage.getItem(KEY)
+  } catch {
+    return null
+  }
+}
