@@ -142,9 +142,10 @@ function makeQuadruped({ body, accent, eye = NV }: RigOpts): React.FC<ModelProps
     const pos: [number, number, number][] = [[0.28, 0, 0.16], [0.28, 0, -0.16], [-0.28, 0, 0.16], [-0.28, 0, -0.16]]
     useFrame((_, dt) => {
       if (dataDriven) {
+        // direct joint_state -> rotation: joints[0..3]=hip(HFE), [4..7]=knee(KFE)
         const j = jref.current
         hips.current.forEach((g, i) => g && (g.rotation.z = (j[i] ?? 0)))
-        knees.current.forEach((g, i) => g && (g.rotation.z = -0.5 + (j[i + 4] ?? 0)))
+        knees.current.forEach((g, i) => g && (g.rotation.z = (j[i + 4] ?? 0)))
       } else {
         if (playing) t.current += dt * speed * 4
         const tt = t.current

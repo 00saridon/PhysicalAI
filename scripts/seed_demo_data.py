@@ -55,13 +55,15 @@ def gen_arm():
 
 
 def gen_quadruped():
-    # diagonal trot: legs [LF, RF, LH, RH] -> phases [0, pi, pi, 0]
+    # diagonal trot, legs [LF, RF, LH, RH] -> phases [0, pi, pi, 0].
+    # Angles are in rig convention (joint_state[i] == rotation, rad):
+    #   [0..3] HFE (hip), [4..7] KFE (knee, crouched ~-0.6), [8..11] HAA.
     ph = np.array([0, np.pi, np.pi, 0])
     j = np.zeros((N, 12), np.float32)
     for k in range(4):
-        j[:, k] = np.sin(t + ph[k]) * 0.35                              # hip (0..3)
-        j[:, 4 + k] = np.maximum(0, np.sin(t + ph[k] + 0.6)) * 0.5      # knee (4..7)
-        j[:, 8 + k] = rng.normal(0, 0.01, N)                           # HAA (8..11)
+        j[:, k] = 0.2 + np.sin(t + ph[k]) * 0.3                              # HFE
+        j[:, 4 + k] = -0.55 - np.maximum(0, np.sin(t + ph[k] + 0.6)) * 0.3   # KFE
+        j[:, 8 + k] = rng.normal(0, 0.01, N)                                # HAA
     return j
 
 

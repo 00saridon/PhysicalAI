@@ -60,9 +60,28 @@ python scripts/export_isaaclab_dataset.py --task Isaac-Reach-Franka-v0 --name sy
 | `g1_v1` | `Isaac-Velocity-Rough-G1-v0` / `-Flat-` |
 | `crazyflie_v1` | `Isaac-Quadcopter-Direct-v0` |
 
-> 관절 순서가 리그와 다르면 `--reorder "1,4,7,10,2,5,8,11,0,3,6,9"`로 재정렬합니다
-> (원본 순서는 `env.scene["robot"].joint_names`로 확인). 백엔드는
-> `GET /api/dataset/trajectory?name=<name>` 로 이 파일을 strided 제공합니다.
+관절 순서는 `--robot`으로 **이름 기반 자동 매핑**합니다(Isaac Lab 원본 순서 무관):
+
+```bash
+python scripts/export_isaaclab_dataset.py --task Isaac-Velocity-Flat-Anymal-D-v0 \
+    --name anymal_v1 --robot anymal --steps 600
+```
+
+### ANYmal-D 관절 매핑 (12-DOF)
+
+대시보드 쿼드러페드 리그 슬롯 ↔ ANYmal 관절 이름. `joint_state[i] == 회전각(rad)` 직접 매핑입니다.
+
+| 리그 슬롯 | 인덱스 | ANYmal 관절 | 의미 |
+|---|---|---|---|
+| hip (HFE) | 0,1,2,3 | `LF_HFE, RF_HFE, LH_HFE, RH_HFE` | 다리 앞뒤 스윙 |
+| knee (KFE) | 4,5,6,7 | `LF_KFE, RF_KFE, LH_KFE, RH_KFE` | 무릎 굽힘(웅크림 ~-0.6) |
+| (HAA) | 8,9,10,11 | `LF_HAA, RF_HAA, LH_HAA, RH_HAA` | 좌우 벌림(리그 시각화 미사용) |
+
+- 다리 순서: **LF, RF, LH, RH**(front-left/right, hind-left/right). 대각 트로트 = LF+RH / RF+LH.
+- 부호가 반대로 보이면 레이아웃 이름 앞에 `-`를 붙여 반전(예: `-LF_KFE`).
+- `--robot`이 `env.scene["robot"].joint_names`를 출력하므로 실제 순서를 확인하고 `ROBOT_LAYOUTS`(export 스크립트)를 조정하면 됩니다.
+
+> 백엔드는 `GET /api/dataset/trajectory?name=<name>` 로 이 파일을 strided 제공합니다.
 
 **적용 경로**
 - **로컬**: 생성된 `outputs/dataset/<name>.hdf5`가 곧바로 사용됩니다(시드는 기존 파일을 덮어쓰지 않음).

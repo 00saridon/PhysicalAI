@@ -34,6 +34,40 @@ order with `env.scene["robot"].joint_names`.
 import argparse
 import os
 
+# Desired joint-name order per robot = the dashboard rig's slot layout.
+# Quadruped rig: HFE x4 (hips), KFE x4 (knees), HAA x4 — legs [LF, RF, LH, RH].
+# Built by matching `env.scene["robot"].joint_names`, so it is robust to Isaac
+# Lab's raw joint ordering. Prefix a name with '-' to negate that joint's sign.
+ROBOT_LAYOUTS = {
+    "anymal": ["LF_HFE", "RF_HFE", "LH_HFE", "RH_HFE",
+               "LF_KFE", "RF_KFE", "LH_KFE", "RH_KFE",
+               "LF_HAA", "RF_HAA", "LH_HAA", "RH_HAA"],
+    "spot":   ["fl_hy", "fr_hy", "hl_hy", "hr_hy",
+               "fl_kn", "fr_kn", "hl_kn", "hr_kn",
+               "fl_hx", "fr_hx", "hl_hx", "hr_hx"],
+}
+
+
+def build_reorder(joint_names, layout):
+    """Map each target joint name to its index in the env's joint order.
+    Returns (indices, signs). Raises with the available names if one is missing."""
+    lower = [n.lower() for n in joint_names]
+    idx, signs = [], []
+    for target in layout:
+        sign = 1.0
+        name = target
+        if name.startswith("-"):
+            sign, name = -1.0, name[1:]
+        key = name.lower()
+        match = next((i for i, n in enumerate(lower) if n == key), None)
+        if match is None:
+            match = next((i for i, n in enumerate(lower) if key in n), None)
+        if match is None:
+            raise SystemExit(f"joint '{name}' not found in {joint_names}")
+        idx.append(match)
+        signs.append(sign)
+    return idx, signs
+
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -41,7 +75,9 @@ def main():
     ap.add_argument("--name", required=True, help="output dataset name -> outputs/dataset/<name>.hdf5")
     ap.add_argument("--steps", type=int, default=600)
     ap.add_argument("--checkpoint", default=None, help="optional policy .pt (else random actions)")
-    ap.add_argument("--reorder", default=None, help="comma-separated joint index remap")
+    ap.add_argument("--robot", choices=sorted(ROBOT_LAYOUTS), default=None,
+                    help="auto-build the joint reorder from joint_names for this rig")
+    ap.add_argument("--reorder", default=None, help="comma-separated joint index remap (overrides --robot)")
     ap.add_argument("--headless", action="store_true", default=True)
     args = ap.parse_args()
 
@@ -81,7 +117,17 @@ def main():
         policy = torch.jit.load(args.checkpoint) if args.checkpoint.endswith(".jit") \
             else torch.load(args.checkpoint, map_location="cpu")
 
-    reorder = [int(x) for x in args.reorder.split(",")] if args.reorder else None
+    joint_names = list(env.unwrapped.scene["robot"].joint_names)
+    print(f"[export] joint_names ({len(joint_names)}): {joint_names}")
+    signs = None
+    if args.reorder:
+        reorder = [int(x) for x in args.reorder.split(",")]
+    elif args.robot:
+        reorder, signs = build_reorder(joint_names, ROBOT_LAYOUTS[args.robot])
+        print(f"[export] --robot {args.robot}: reorder={reorder}")
+    else:
+        reorder = None
+    signs_np = np.asarray(signs, np.float32) if signs else None
 
     obs, _ = env.reset()
     js, act, rew = [], [], []
@@ -93,8 +139,10 @@ def main():
                 a = torch.from_numpy(env.action_space.sample()).to(env.unwrapped.device)
         obs, r, term, trunc, _ = env.step(a)
         q = env.unwrapped.scene["robot"].data.joint_pos[0].detach().cpu().numpy()
-        if reorder:
+        if reorder is not None:
             q = q[reorder]
+            if signs_np is not None:
+                q = q * signs_np
         js.append(q.astype(np.float32))
         act.append(np.asarray(a[0].detach().cpu().numpy(), np.float32))
         rew.append(float(r[0]))
