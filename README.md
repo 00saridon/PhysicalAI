@@ -225,6 +225,36 @@ foreach ($d in 'demos','checkpoints','outputs') { cmd /c mklink /J ".\$d" "C:\ph
 
 ---
 
+## Colab GPU 백엔드 (원격 실학습)
+
+로컬에 GPU가 없으면 **무료 Colab GPU**에서 백엔드를 띄우고, 배포된(또는 로컬) 대시보드를
+그 백엔드에 연결할 수 있습니다. `configs/env.yaml`의 `mock_mode: true` 덕분에 Isaac Sim
+없이도 IL·RL 학습이 **Colab GPU에서 실제로** 돌아갑니다.
+
+1. **[colab_gpu_backend.ipynb](notebooks/colab_gpu_backend.ipynb)** 를 Colab에서 열고
+   **런타임 → 런타임 유형 변경 → T4 GPU**(또는 L4) 선택
+2. Step 1→3 셀 실행 — 레포 클론·의존성 설치 후 `uvicorn`을 띄우고 **cloudflared 터널**로
+   공개 HTTPS URL을 만들어 출력합니다.
+3. 출력된 링크로 대시보드 접속 (백엔드가 이 GPU로 연결됩니다):
+
+   ```
+   https://<your-site>.netlify.app/?api=https://<xxxx>.trycloudflare.com
+   ```
+
+   또는 대시보드 **Config → Backend (API)** 에 터널 URL을 붙여넣고 *적용*.
+4. 상단 토글을 **REAL_MODE**로 전환(이 백엔드는 torch가 있어 활성화됨) → **Run**에서
+   `COLLECT → IL → RL → EXPORT` 순서로 실행. RL(PPO 50k steps)이 GPU에서 학습됩니다.
+5. **Training** 탭에서 reward/loss 곡선을 실시간으로 확인.
+
+> **백엔드 주소 전환**: `?api=<url>` 쿼리 파라미터 또는 Config 페이지에서 런타임에 바꿀 수
+> 있어 **재빌드가 필요 없습니다**(`localStorage`에 저장). 빈 값으로 초기화하면 기본 백엔드
+> (`VITE_API_URL`)로 복귀합니다.
+>
+> **임시성 주의**: Colab 세션과 터널 URL은 임시입니다(수 시간 후 만료, 재시작 시 URL 변경).
+> 데모·실험용이며, 노트북 탭을 닫으면 백엔드와 터널이 종료됩니다.
+
+---
+
 ## 대시보드 페이지
 
 > UI 화면 구성과 동작 흐름(워크플로우·상태 머신·API)은 **[docs/UI-FLOW.md](docs/UI-FLOW.md)** 에 정리되어 있습니다.
@@ -238,7 +268,7 @@ foreach ($d in 'demos','checkpoints','outputs') { cmd /c mklink /J ".\$d" "C:\ph
 | **Demos** | 로봇 모델 갤러리(클릭 → 3D) · 수집된 HDF5 에피소드 목록 · Collect 실행 |
 | **Simulation** | 6종 로봇 3D 재생(Three.js) · 모델 선택 · 재생 컨트롤 · 관절/RGB 텔레메트리 |
 | **Artifacts** | 타입별 필터 (ONNX / HDF5 / PT / ZIP) · 다운로드 |
-| **Config** | `configs/*.yaml` 읽기 전용 뷰어 |
+| **Config** | `configs/*.yaml` 읽기 전용 뷰어 · 백엔드(API) URL 오버라이드 |
 
 ---
 
@@ -333,6 +363,7 @@ cd dashboard && npm test
 | 노트북 | 설명 | 실행 |
 |---|---|---|
 | [ovrtx_minimal_colab.ipynb](notebooks/ovrtx_minimal_colab.ipynb) | NVIDIA OVRTX로 OpenUSD 씬 렌더링 → PNG 저장 | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/00saridon/PhysicalAI/blob/main/notebooks/ovrtx_minimal_colab.ipynb) |
+| [colab_gpu_backend.ipynb](notebooks/colab_gpu_backend.ipynb) | Colab GPU에서 백엔드 기동 + cloudflared 터널 → 대시보드 연결([사용법](#colab-gpu-백엔드-원격-실학습)) | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/00saridon/PhysicalAI/blob/main/notebooks/colab_gpu_backend.ipynb) |
 
 ---
 
