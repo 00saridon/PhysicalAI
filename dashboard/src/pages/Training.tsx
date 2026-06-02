@@ -9,8 +9,11 @@ type Metric = 'rew_mean' | 'loss'
 
 export function Training() {
   const [metric, setMetric] = useState<Metric>('rew_mean')
-  const { lines, connected } = useSSELogs('/api/logs/stream')
-  const { points } = useSSEMetrics('/api/metrics/stream')
+  // use VITE_API_URL like Overview/Run so SSE streams direct to the backend
+  // (avoids the Netlify proxy buffering edge case in production)
+  const apiBase = (import.meta.env.VITE_API_URL ?? '') + '/api'
+  const { lines, connected } = useSSELogs(`${apiBase}/logs/stream`)
+  const { points } = useSSEMetrics(`${apiBase}/metrics/stream`)
 
   const rlPoints = points.filter(p => p.stage === 'rl' && p.rew_mean !== undefined)
   const ilPoints = points.filter(p => p.stage === 'il' && p.loss !== undefined)
