@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { LogLine } from '../types/pipeline'
 import { parseLogLevel } from '../types/pipeline'
+import { streamSSE } from '../api/sse'
 
 const MAX_LINES = 200
 
@@ -10,8 +11,6 @@ export function useSSELogs(
 ): { lines: LogLine[]; connected: boolean } {
   const [lines, setLines] = useState<LogLine[]>([])
   const [connected, setConnected] = useState(false)
-  const retryDelay = useRef(1000)
-  const esRef = useRef<EventSource | null>(null)
   // Keep the latest callback without re-subscribing the stream every render.
   const onTerminalRef = useRef(onTerminal)
   onTerminalRef.current = onTerminal
@@ -20,59 +19,49 @@ export function useSSELogs(
   const seen = useRef<Set<string>>(new Set())
 
   useEffect(() => {
+    const ac = new AbortController()
     let cancelled = false
+    let retryDelay = 1000
 
-    function connect() {
+    function run() {
       if (cancelled) return
-      const es = new EventSource(url)
-      esRef.current = es
-
-      es.addEventListener('log', (e: MessageEvent) => {
-        try {
-          if (e.lastEventId) {
-            if (seen.current.has(e.lastEventId)) return
-            seen.current.add(e.lastEventId)
+      streamSSE(url, {
+        signal: ac.signal,
+        onOpen: () => {
+          setConnected(true)
+          retryDelay = 1000
+        },
+        onMessage: (e) => {
+          if (e.event === 'log') {
+            if (e.id) {
+              if (seen.current.has(e.id)) return
+              seen.current.add(e.id)
+            }
+            try {
+              const { line, ts } = JSON.parse(e.data) as { line: string; ts: number }
+              setLines(prev => {
+                const next = [...prev, { ts, level: parseLogLevel(line), text: line }]
+                return next.length > MAX_LINES ? next.slice(next.length - MAX_LINES) : next
+              })
+            } catch {}
+          } else if (e.event === 'done' || e.event === 'error') {
+            onTerminalRef.current?.() // stage finished/failed — let callers flip status now
           }
-          const { line, ts } = JSON.parse(e.data) as { line: string; ts: number }
-          setLines(prev => {
-            const next = [...prev, { ts, level: parseLogLevel(line), text: line }]
-            return next.length > MAX_LINES ? next.slice(next.length - MAX_LINES) : next
-          })
-        } catch {}
+        },
+        onClose: (reconnect) => {
+          setConnected(false)
+          if (!cancelled && reconnect) {
+            setTimeout(run, Math.min(retryDelay, 4000))
+            retryDelay = Math.min(retryDelay * 2, 4000)
+          }
+        },
       })
-
-      es.addEventListener('done', () => {
-        setConnected(false)
-        es.close()
-        retryDelay.current = 1000
-        onTerminalRef.current?.()  // stage finished — let callers flip status now
-      })
-
-      es.addEventListener('error', () => {
-        setConnected(false)
-        es.close()
-        onTerminalRef.current?.()  // stage failed — same
-      })
-
-      es.onerror = () => {
-        setConnected(false)
-        es.close()
-        if (!cancelled) {
-          setTimeout(connect, Math.min(retryDelay.current, 4000))
-          retryDelay.current = Math.min(retryDelay.current * 2, 4000)
-        }
-      }
-
-      es.onopen = () => {
-        setConnected(true)
-        retryDelay.current = 1000
-      }
     }
 
-    connect()
+    run()
     return () => {
       cancelled = true
-      esRef.current?.close()
+      ac.abort()
     }
   }, [url])
 

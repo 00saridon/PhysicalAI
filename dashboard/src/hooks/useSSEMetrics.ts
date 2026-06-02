@@ -1,70 +1,56 @@
 import { useEffect, useRef, useState } from 'react'
 import type { MetricPoint } from '../types/pipeline'
+import { streamSSE } from '../api/sse'
 
 const MAX_POINTS = 500
 
 export function useSSEMetrics(url: string): { points: MetricPoint[]; connected: boolean } {
   const [points, setPoints] = useState<MetricPoint[]>([])
   const [connected, setConnected] = useState(false)
-  const retryDelay = useRef(1000)
-  const esRef = useRef<EventSource | null>(null)
   // The server backfills history on every (re)subscribe, so a reconnect replays
   // points we already have. Track seen (stage:step) keys to keep appends idempotent.
   const seen = useRef<Set<string>>(new Set())
 
   useEffect(() => {
+    const ac = new AbortController()
     let cancelled = false
+    let retryDelay = 1000
 
-    function connect() {
+    function run() {
       if (cancelled) return
-      const es = new EventSource(url)
-      esRef.current = es
-
-      es.addEventListener('metric', (e: MessageEvent) => {
-        try {
-          const point = JSON.parse(e.data) as MetricPoint
-          const key = `${point.stage}:${point.step}`
-          if (seen.current.has(key)) return
-          seen.current.add(key)
-          setPoints(prev => {
-            const next = [...prev, point]
-            return next.length > MAX_POINTS ? next.slice(next.length - MAX_POINTS) : next
-          })
-        } catch {}
+      streamSSE(url, {
+        signal: ac.signal,
+        onOpen: () => {
+          setConnected(true)
+          retryDelay = 1000
+        },
+        onMessage: (e) => {
+          if (e.event !== 'metric') return
+          try {
+            const point = JSON.parse(e.data) as MetricPoint
+            const key = `${point.stage}:${point.step}`
+            if (seen.current.has(key)) return
+            seen.current.add(key)
+            setPoints(prev => {
+              const next = [...prev, point]
+              return next.length > MAX_POINTS ? next.slice(next.length - MAX_POINTS) : next
+            })
+          } catch {}
+        },
+        onClose: (reconnect) => {
+          setConnected(false)
+          if (!cancelled && reconnect) {
+            setTimeout(run, Math.min(retryDelay, 4000))
+            retryDelay = Math.min(retryDelay * 2, 4000)
+          }
+        },
       })
-
-      // Server-sent terminal events: the stage finished or failed. Stop here —
-      // closing manually means onerror won't fire, so we don't reconnect.
-      es.addEventListener('done', () => {
-        setConnected(false)
-        es.close()
-        retryDelay.current = 1000
-      })
-      es.addEventListener('error', () => {
-        setConnected(false)
-        es.close()
-      })
-
-      // Native transport failure (connection drop): retry with exponential backoff.
-      es.onerror = () => {
-        setConnected(false)
-        es.close()
-        if (!cancelled) {
-          setTimeout(connect, Math.min(retryDelay.current, 4000))
-          retryDelay.current = Math.min(retryDelay.current * 2, 4000)
-        }
-      }
-
-      es.onopen = () => {
-        setConnected(true)
-        retryDelay.current = 1000
-      }
     }
 
-    connect()
+    run()
     return () => {
       cancelled = true
-      esRef.current?.close()
+      ac.abort()
     }
   }, [url])
 
