@@ -10,7 +10,7 @@ from api.routes.dataset import router as dataset_router
 app = FastAPI(title="PhysicalAI Dashboard API")
 app.state.runner = SubprocessRunner()
 
-# CORS: 로컬 개발 + Netlify 프로덕션 URL 허용
+# CORS: 로컬 개발 + Netlify 프로덕션(프리뷰 포함) 허용
 # ALLOWED_ORIGINS 환경변수로 추가 도메인 지정 가능 (쉼표 구분)
 _default_origins = ["http://localhost:5173", "http://localhost:4173"]
 _extra = os.getenv("ALLOWED_ORIGINS", "")
@@ -19,6 +19,8 @@ _origins = _default_origins + [o.strip() for o in _extra.split(",") if o.strip()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_origins,
+    # any Netlify site/preview (the dashboard is hosted on *.netlify.app)
+    allow_origin_regex=r"https://([a-z0-9-]+\.)*netlify\.app",
     allow_methods=["*"],
     allow_headers=["*"],
 )
