@@ -34,10 +34,14 @@ order with `env.scene["robot"].joint_names`.
 import argparse
 import os
 
-# Desired joint-name order per robot = the dashboard rig's slot layout.
-# Quadruped rig: HFE x4 (hips), KFE x4 (knees), HAA x4 — legs [LF, RF, LH, RH].
-# Built by matching `env.scene["robot"].joint_names`, so it is robust to Isaac
-# Lab's raw joint ordering. Prefix a name with '-' to negate that joint's sign.
+import math
+
+# Desired joint-name order per robot = the dashboard rig's slot layout, built by
+# matching `env.scene["robot"].joint_names` (robust to Isaac Lab's raw order).
+#   Quadruped rig: HFE x4 (hips 0..3), KFE x4 (knees 4..7), HAA x4 — legs [LF,RF,LH,RH].
+#   Humanoid rig : legL,legR,armL,armR pitch = slots 0..3 (then the rest via '*').
+# '-' prefix negates a joint's sign; '*' appends all remaining (unlisted) joints.
+_HUMANOID = ["left_hip_pitch", "right_hip_pitch", "left_shoulder_pitch", "right_shoulder_pitch", "*"]
 ROBOT_LAYOUTS = {
     "anymal": ["LF_HFE", "RF_HFE", "LH_HFE", "RH_HFE",
                "LF_KFE", "RF_KFE", "LH_KFE", "RH_KFE",
@@ -45,28 +49,45 @@ ROBOT_LAYOUTS = {
     "spot":   ["fl_hy", "fr_hy", "hl_hy", "hr_hy",
                "fl_kn", "fr_kn", "hl_kn", "hr_kn",
                "fl_hx", "fr_hx", "hl_hx", "hr_hx"],
+    "h1":     _HUMANOID,
+    "g1":     _HUMANOID,
 }
+
+# Robots whose "state" is the body orientation, not joint angles (free flyers).
+# Recorded as [pitch, roll, yaw, 0] -> rig root.rotation.x/z.
+ROBOT_STATE = {"crazyflie": "root_euler"}
 
 
 def build_reorder(joint_names, layout):
     """Map each target joint name to its index in the env's joint order.
-    Returns (indices, signs). Raises with the available names if one is missing."""
+    Supports '-name' (negate) and '*' (append all remaining unused joints).
+    Returns (indices, signs)."""
     lower = [n.lower() for n in joint_names]
     idx, signs = [], []
     for target in layout:
-        sign = 1.0
-        name = target
-        if name.startswith("-"):
-            sign, name = -1.0, name[1:]
+        if target == "*":
+            for i in range(len(joint_names)):
+                if i not in idx:
+                    idx.append(i); signs.append(1.0)
+            continue
+        sign, name = (-1.0, target[1:]) if target.startswith("-") else (1.0, target)
         key = name.lower()
         match = next((i for i, n in enumerate(lower) if n == key), None)
         if match is None:
             match = next((i for i, n in enumerate(lower) if key in n), None)
         if match is None:
             raise SystemExit(f"joint '{name}' not found in {joint_names}")
-        idx.append(match)
-        signs.append(sign)
+        idx.append(match); signs.append(sign)
     return idx, signs
+
+
+def quat_to_euler(q):
+    """(w, x, y, z) -> (roll, pitch, yaw) in radians."""
+    w, x, y, z = [float(v) for v in q]
+    roll = math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y))
+    pitch = math.asin(max(-1.0, min(1.0, 2 * (w * y - z * x))))
+    yaw = math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
+    return roll, pitch, yaw
 
 
 def main():
@@ -75,8 +96,8 @@ def main():
     ap.add_argument("--name", required=True, help="output dataset name -> outputs/dataset/<name>.hdf5")
     ap.add_argument("--steps", type=int, default=600)
     ap.add_argument("--checkpoint", default=None, help="optional policy .pt (else random actions)")
-    ap.add_argument("--robot", choices=sorted(ROBOT_LAYOUTS), default=None,
-                    help="auto-build the joint reorder from joint_names for this rig")
+    ap.add_argument("--robot", choices=sorted(set(ROBOT_LAYOUTS) | set(ROBOT_STATE)), default=None,
+                    help="auto-build the joint reorder (or body-orientation state) for this rig")
     ap.add_argument("--reorder", default=None, help="comma-separated joint index remap (overrides --robot)")
     ap.add_argument("--headless", action="store_true", default=True)
     args = ap.parse_args()
@@ -119,15 +140,18 @@ def main():
 
     joint_names = list(env.unwrapped.scene["robot"].joint_names)
     print(f"[export] joint_names ({len(joint_names)}): {joint_names}")
+    state = ROBOT_STATE.get(args.robot, "joint_pos")
     signs = None
     if args.reorder:
         reorder = [int(x) for x in args.reorder.split(",")]
-    elif args.robot:
+    elif args.robot in ROBOT_LAYOUTS:
         reorder, signs = build_reorder(joint_names, ROBOT_LAYOUTS[args.robot])
         print(f"[export] --robot {args.robot}: reorder={reorder}")
     else:
         reorder = None
     signs_np = np.asarray(signs, np.float32) if signs else None
+    if state == "root_euler":
+        print(f"[export] --robot {args.robot}: recording body orientation [pitch, roll, yaw, 0]")
 
     obs, _ = env.reset()
     js, act, rew = [], [], []
@@ -138,11 +162,17 @@ def main():
             else:
                 a = torch.from_numpy(env.action_space.sample()).to(env.unwrapped.device)
         obs, r, term, trunc, _ = env.step(a)
-        q = env.unwrapped.scene["robot"].data.joint_pos[0].detach().cpu().numpy()
-        if reorder is not None:
-            q = q[reorder]
-            if signs_np is not None:
-                q = q * signs_np
+        data = env.unwrapped.scene["robot"].data
+        if state == "root_euler":
+            quat = (data.root_quat_w if hasattr(data, "root_quat_w") else data.root_state_w[:, 3:7])
+            roll, pitch, yaw = quat_to_euler(quat[0].detach().cpu().numpy())
+            q = np.array([pitch, roll, yaw, 0.0], np.float32)
+        else:
+            q = data.joint_pos[0].detach().cpu().numpy()
+            if reorder is not None:
+                q = q[reorder]
+                if signs_np is not None:
+                    q = q * signs_np
         js.append(q.astype(np.float32))
         act.append(np.asarray(a[0].detach().cpu().numpy(), np.float32))
         rew.append(float(r[0]))

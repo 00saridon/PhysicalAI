@@ -83,6 +83,36 @@ python scripts/export_isaaclab_dataset.py --task Isaac-Velocity-Flat-Anymal-D-v0
 
 > 백엔드는 `GET /api/dataset/trajectory?name=<name>` 로 이 파일을 strided 제공합니다.
 
+### Spot 관절 매핑 (12-DOF) — `--robot spot`
+
+ANYmal과 동일한 쿼드러페드 리그, Boston Dynamics 명명만 다릅니다 (`hx`=HAA, `hy`=HFE, `kn`=KFE).
+
+| 리그 슬롯 | Spot 관절 |
+|---|---|
+| hip 0–3 | `fl_hy, fr_hy, hl_hy, hr_hy` |
+| knee 4–7 | `fl_kn, fr_kn, hl_kn, hr_kn` |
+| (HAA) 8–11 | `fl_hx, fr_hx, hl_hx, hr_hx` |
+
+### H1 / G1 휴머노이드 매핑 — `--robot h1` / `--robot g1`
+
+휴머노이드 리그는 **4개 pitch 관절**(다리·팔 앞뒤 스윙)을 슬롯 0–3에, 나머지는 `*`로 뒤에 붙입니다.
+
+| 리그 슬롯 | 관절 (이름 부분일치) |
+|---|---|
+| legL (0) | `left_hip_pitch` |
+| legR (1) | `right_hip_pitch` |
+| armL (2) | `left_shoulder_pitch` |
+| armR (3) | `right_shoulder_pitch` |
+| 나머지 (4..) | `*` (남은 관절 자동 추가) |
+
+> G1은 관절명이 `left_hip_pitch_joint`처럼 `_joint` 접미사가 붙어도 부분일치로 매핑됩니다.
+
+### Crazyflie 매핑 (자세 기반) — `--robot crazyflie`
+
+쿼드콥터는 관절각이 아니라 **기체 자세**로 구동합니다. 익스포터가 `root_quat`→오일러로 변환해
+`[pitch, roll, yaw, 0]`을 저장하고, 리그는 `joints[0]→pitch(rotation.x)`, `joints[1]→roll(rotation.z)`,
+로터는 항상 회전합니다.
+
 **적용 경로**
 - **로컬**: 생성된 `outputs/dataset/<name>.hdf5`가 곧바로 사용됩니다(시드는 기존 파일을 덮어쓰지 않음).
 - **클라우드(Railway)**: 작게 다운샘플한 실데이터 HDF5를 **`assets/datasets/<name>.hdf5`** 에 커밋하면
