@@ -65,18 +65,31 @@ def gen_quadruped():
     return j
 
 
-def gen_humanoid():
-    j = np.zeros((N, 23), np.float32)
+def gen_humanoid(dof=23):
+    j = np.zeros((N, dof), np.float32)
     j[:, 0] = np.sin(t) * 0.5                  # legL
     j[:, 1] = np.sin(t + np.pi) * 0.5          # legR
     j[:, 2] = np.sin(t + np.pi) * 0.45         # armL
     j[:, 3] = np.sin(t) * 0.45                 # armR
-    j[:, 4:] = rng.normal(0, 0.02, (N, 19))
+    if dof > 4:
+        j[:, 4:] = rng.normal(0, 0.02, (N, dof - 4))
+    return j
+
+
+def gen_quadcopter():
+    # joints[0]/[1] = body tilt (pitch/roll); rotors always spin in the rig
+    j = np.zeros((N, 4), np.float32)
+    j[:, 0] = np.sin(t * 1.2) * 0.06
+    j[:, 1] = np.sin(t * 0.9 + 1.0) * 0.06
+    j[:, 2:] = rng.normal(0, 0.01, (N, 2))
     return j
 
 
 arm_joints, arm_rgb = gen_arm()
 write("synthetic_v1", arm_joints, rgb=arm_rgb)
 write("anymal_v1", gen_quadruped())
-write("g1_v1", gen_humanoid())
+write("spot_v1", gen_quadruped())
+write("g1_v1", gen_humanoid(23))
+write("h1_v1", gen_humanoid(19))
+write("crazyflie_v1", gen_quadcopter())
 print("[seed] done")

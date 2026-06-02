@@ -265,20 +265,20 @@ export const MODELS: RobotModel[] = [
     desc: 'ANYbotics 4족 보행 로봇. Isaac Lab `ANYMAL_D_CFG`. 궤적(joint_state[12])으로 보행 구동.',
     target: [0, 0.4, 0], camera: [1.7, 1.1, 2.0], Component: makeQuadruped({ body: '#2a3340', accent: NV, eye: NV }) },
 
-  { id: 'spot', name: 'Boston Dynamics Spot', category: 'Quadruped', dof: 12, dataDriven: false,
-    desc: 'Boston Dynamics Spot. Isaac Lab `SPOT_CFG`. 대각 트로트 보행 시연(절차적).',
+  { id: 'spot', name: 'Boston Dynamics Spot', category: 'Quadruped', dof: 12, dataDriven: true, dataset: 'spot_v1',
+    desc: 'Boston Dynamics Spot. Isaac Lab `SPOT_CFG`. 궤적(joint_state[12])으로 대각 트로트 보행.',
     target: [0, 0.4, 0], camera: [1.7, 1.1, 2.0], Component: makeQuadruped({ body: '#caa915', accent: '#1c1c1c', eye: '#ffcc33' }) },
 
-  { id: 'h1', name: 'Unitree H1', category: 'Humanoid', dof: 19, dataDriven: false,
-    desc: 'Unitree H1 이족 휴머노이드. Isaac Lab `H1_CFG`. 팔·다리 스윙 보행 시연(절차적).',
+  { id: 'h1', name: 'Unitree H1', category: 'Humanoid', dof: 19, dataDriven: true, dataset: 'h1_v1',
+    desc: 'Unitree H1 이족 휴머노이드. Isaac Lab `H1_CFG`. 궤적(joint_state[19])으로 보행 구동.',
     target: [0, 0.9, 0], camera: [1.8, 1.4, 2.2], Component: makeHumanoid({ body: '#e9edf2', accent: NV, eye: NV }) },
 
   { id: 'g1', name: 'Unitree G1', category: 'Humanoid', dof: 23, dataDriven: true, dataset: 'g1_v1',
     desc: 'Unitree G1 소형 휴머노이드. Isaac Lab `G1_CFG`. 궤적(joint_state[23])으로 보행 구동.',
     target: [0, 0.9, 0], camera: [1.7, 1.3, 2.1], Component: makeHumanoid({ body: '#2b3442', accent: '#00d4ff', eye: '#00d4ff' }) },
 
-  { id: 'crazyflie', name: 'Crazyflie Quadcopter', category: 'Aerial', dof: 4, dataDriven: false,
-    desc: 'Bitcraze Crazyflie 드론. Isaac Lab `CRAZYFLIE_CFG`. 로터 회전 + 호버링 시연.',
+  { id: 'crazyflie', name: 'Crazyflie Quadcopter', category: 'Aerial', dof: 4, dataDriven: true, dataset: 'crazyflie_v1',
+    desc: 'Bitcraze Crazyflie 드론. Isaac Lab `CRAZYFLIE_CFG`. 궤적(joint_state[4])으로 자세 + 로터 회전.',
     target: [0, 1.0, 0], camera: [1.4, 1.3, 1.7], Component: makeQuadcopter({ body: '#222a35', accent: NV }) },
 ]
 
