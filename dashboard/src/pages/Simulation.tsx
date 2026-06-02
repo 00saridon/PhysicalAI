@@ -193,7 +193,7 @@ export function Simulation() {
               </Environment>
 
               <Model joints={joints} phase={phase} playing={playing} speed={speed} dataDriven={effDataDriven} showLabels={showLabels} eeRef={eeRef} />
-              {showTelemetry && <EETracker targetRef={eeRef} onPos={setEePos} />}
+              {showTelemetry && model.ee && <EETracker targetRef={eeRef} onPos={setEePos} />}
 
               <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
                 <planeGeometry args={[50, 50]} />
@@ -268,29 +268,33 @@ export function Simulation() {
 
           {showTelemetry ? (
             <>
-              <div className="bg-panel border border-border rounded-xl p-3">
-                <p className="text-[9px] font-black uppercase tracking-wider text-muted mb-2">End-Effector Pose (m)</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {(['X', 'Y', 'Z'] as const).map((ax, k) => (
-                    <div key={ax} className="rounded-lg bg-surface border border-border px-2 py-1.5 text-center">
-                      <p className="text-[8px] font-bold" style={{ color: ['#ef4444', '#22c55e', '#3b82f6'][k] }}>{ax}</p>
-                      <p className="text-[11px] font-black font-mono text-slate-200">{eePos[k].toFixed(3)}</p>
-                    </div>
-                  ))}
+              {model.ee && (
+                <div className="bg-panel border border-border rounded-xl p-3">
+                  <p className="text-[9px] font-black uppercase tracking-wider text-muted mb-2">End-Effector Pose (m)</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['X', 'Y', 'Z'] as const).map((ax, k) => (
+                      <div key={ax} className="rounded-lg bg-surface border border-border px-2 py-1.5 text-center">
+                        <p className="text-[8px] font-bold" style={{ color: ['#ef4444', '#22c55e', '#3b82f6'][k] }}>{ax}</p>
+                        <p className="text-[11px] font-black font-mono text-slate-200">{eePos[k].toFixed(3)}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="bg-panel border border-border rounded-xl p-3">
-                <p className="text-[9px] font-black uppercase tracking-wider text-muted mb-2">Joint State · 7 DOF (rad)</p>
+                <p className="text-[9px] font-black uppercase tracking-wider text-muted mb-2">Joint State · {traj?.joint_dim ?? 7} DOF (rad)</p>
                 <div className="flex flex-col gap-1.5">
-                  {dJoints.slice(0, 7).map((v, i) => <Bar key={i} label={`J${i}`} value={v} max={0.8} color={JOINT_COLORS[i]} />)}
+                  {dJoints.slice(0, Math.min(traj?.joint_dim ?? 7, 12)).map((v, i) => <Bar key={i} label={`J${i}`} value={v} max={0.8} color={JOINT_COLORS[i % JOINT_COLORS.length]} />)}
                 </div>
               </div>
-              <div className="bg-panel border border-border rounded-xl p-3">
-                <p className="text-[9px] font-black uppercase tracking-wider text-muted mb-2">Policy Action · 7 DOF</p>
-                <div className="flex flex-col gap-1.5">
-                  {dActions.slice(0, 7).map((v, i) => <Bar key={i} label={`A${i}`} value={v} max={1.0} color={JOINT_COLORS[i]} />)}
+              {(traj?.action_dim ?? 0) > 0 && (
+                <div className="bg-panel border border-border rounded-xl p-3">
+                  <p className="text-[9px] font-black uppercase tracking-wider text-muted mb-2">Policy Action · {traj?.action_dim} DOF</p>
+                  <div className="flex flex-col gap-1.5">
+                    {dActions.slice(0, Math.min(traj?.action_dim ?? 0, 12)).map((v, i) => <Bar key={i} label={`A${i}`} value={v} max={1.0} color={JOINT_COLORS[i % JOINT_COLORS.length]} />)}
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-panel border border-border rounded-xl p-3 flex flex-col gap-0.5">
                   <p className="text-[9px] font-black uppercase tracking-wider text-muted">Reward</p>

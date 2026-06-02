@@ -47,6 +47,7 @@ export interface RobotModel {
   desc: string
   dataDriven: boolean
   dataset?: string                 // outputs/dataset/<dataset>.hdf5
+  ee?: boolean                     // has an end-effector (show EE readout/trail)
   target: [number, number, number]
   camera: [number, number, number]
   Component: React.FC<ModelProps>
@@ -256,24 +257,24 @@ function makeQuadcopter({ body, accent }: RigOpts): React.FC<ModelProps> {
 
 /* ── Model registry — add robots here ── */
 export const MODELS: RobotModel[] = [
-  { id: 'arm', name: 'Franka 7-DOF Arm', category: 'Manipulator', dof: 7, dataDriven: true, dataset: 'synthetic_v1',
+  { id: 'arm', name: 'Franka 7-DOF Arm', category: 'Manipulator', dof: 7, dataDriven: true, dataset: 'synthetic_v1', ee: true,
     desc: '학습된 정책 궤적(joint_state)으로 구동되는 7축 산업용 암 + 그리퍼. Isaac Lab `FRANKA_PANDA_CFG`.',
     target: [0, 1.15, 0], camera: [2.8, 2.0, 3.2], Component: ArmModel },
 
-  { id: 'anymal', name: 'ANYmal-D', category: 'Quadruped', dof: 12, dataDriven: false,
-    desc: 'ANYbotics 4족 보행 로봇. Isaac Lab `ANYMAL_D_CFG`. 데이터셋 연결 시 12-DOF로 구동.',
+  { id: 'anymal', name: 'ANYmal-D', category: 'Quadruped', dof: 12, dataDriven: true, dataset: 'anymal_v1',
+    desc: 'ANYbotics 4족 보행 로봇. Isaac Lab `ANYMAL_D_CFG`. 궤적(joint_state[12])으로 보행 구동.',
     target: [0, 0.4, 0], camera: [1.7, 1.1, 2.0], Component: makeQuadruped({ body: '#2a3340', accent: NV, eye: NV }) },
 
   { id: 'spot', name: 'Boston Dynamics Spot', category: 'Quadruped', dof: 12, dataDriven: false,
-    desc: 'Boston Dynamics Spot. Isaac Lab `SPOT_CFG`. 대각 트로트 보행 시연.',
+    desc: 'Boston Dynamics Spot. Isaac Lab `SPOT_CFG`. 대각 트로트 보행 시연(절차적).',
     target: [0, 0.4, 0], camera: [1.7, 1.1, 2.0], Component: makeQuadruped({ body: '#caa915', accent: '#1c1c1c', eye: '#ffcc33' }) },
 
   { id: 'h1', name: 'Unitree H1', category: 'Humanoid', dof: 19, dataDriven: false,
-    desc: 'Unitree H1 이족 휴머노이드. Isaac Lab `H1_CFG`. 팔·다리 스윙 보행 시연.',
+    desc: 'Unitree H1 이족 휴머노이드. Isaac Lab `H1_CFG`. 팔·다리 스윙 보행 시연(절차적).',
     target: [0, 0.9, 0], camera: [1.8, 1.4, 2.2], Component: makeHumanoid({ body: '#e9edf2', accent: NV, eye: NV }) },
 
-  { id: 'g1', name: 'Unitree G1', category: 'Humanoid', dof: 23, dataDriven: false,
-    desc: 'Unitree G1 소형 휴머노이드. Isaac Lab `G1_CFG`. 데이터셋 연결 시 관절 구동.',
+  { id: 'g1', name: 'Unitree G1', category: 'Humanoid', dof: 23, dataDriven: true, dataset: 'g1_v1',
+    desc: 'Unitree G1 소형 휴머노이드. Isaac Lab `G1_CFG`. 궤적(joint_state[23])으로 보행 구동.',
     target: [0, 0.9, 0], camera: [1.7, 1.3, 2.1], Component: makeHumanoid({ body: '#2b3442', accent: '#00d4ff', eye: '#00d4ff' }) },
 
   { id: 'crazyflie', name: 'Crazyflie Quadcopter', category: 'Aerial', dof: 4, dataDriven: false,
