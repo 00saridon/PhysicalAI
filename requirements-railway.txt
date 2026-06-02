@@ -5,3 +5,12 @@ pyyaml>=6.0
 numpy>=1.24.0
 h5py>=3.9.0
 pillow>=10.0.0
+
+# REAL-mode pipeline deps. torch is installed separately as the CPU-only wheel
+# in the Dockerfile (the default PyPI torch pulls ~2GB of unusable CUDA libs).
+# The mock IsaacEnv (configs/env.yaml mock_mode: true) runs on CPU, so the full
+# ENV→EXPORT pipeline works here without GPU/Isaac Sim — just slower for RL.
+gymnasium>=0.29.0
+stable-baselines3>=2.2.0
+onnx>=1.15.0
+onnxruntime>=1.16.0

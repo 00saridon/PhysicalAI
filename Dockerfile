@@ -8,8 +8,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Python 의존성
+# Install the CPU-only torch wheel first — the default PyPI torch pulls ~2GB of
+# CUDA libraries we can't use on Railway. stable-baselines3 then resolves
+# against this already-installed CPU torch instead of dragging in the GPU build.
 COPY requirements-railway.txt .
-RUN pip install --no-cache-dir -r requirements-railway.txt
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir -r requirements-railway.txt
 
 # 소스 복사
 COPY . .
