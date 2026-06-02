@@ -232,13 +232,14 @@ foreach ($d in 'demos','checkpoints','outputs') { cmd /c mklink /J ".\$d" "C:\ph
 없이도 IL·RL 학습이 **Colab GPU에서 실제로** 돌아갑니다.
 
 1. **[colab_gpu_backend.ipynb](notebooks/colab_gpu_backend.ipynb)** 를 Colab에서 열고
-   **런타임 → 런타임 유형 변경 → T4 GPU**(또는 L4) 선택
-2. Step 1→3 셀 실행 — 레포 클론·의존성 설치 후 `uvicorn`을 띄우고 **cloudflared 터널**로
-   공개 HTTPS URL을 만들어 출력합니다.
+   **런타임 → 런타임 유형 변경 → T4 GPU**(또는 L4) 선택. 무료 [ngrok authtoken](https://dashboard.ngrok.com/get-started/your-authtoken)을 준비합니다.
+2. Step 1→2 실행(클론·의존성). Step 3의 `NGROK_AUTHTOKEN`에 토큰을 붙여넣고 실행 →
+   `uvicorn` 기동 후 **ngrok 터널**로 공개 HTTPS URL을 출력합니다.
+   *(cloudflared 임시 터널은 SSE를 버퍼링해 Live Log·차트가 실시간으로 안 흐릅니다 — ngrok은 그대로 통과시킵니다.)*
 3. 출력된 링크로 대시보드 접속 (백엔드가 이 GPU로 연결됩니다):
 
    ```
-   https://<your-site>.netlify.app/?api=https://<xxxx>.trycloudflare.com
+   https://<your-site>.netlify.app/?api=https://<xxxx>.ngrok-free.app
    ```
 
    또는 대시보드 **Config → Backend (API)** 에 터널 URL을 붙여넣고 *적용*.
@@ -363,7 +364,7 @@ cd dashboard && npm test
 | 노트북 | 설명 | 실행 |
 |---|---|---|
 | [ovrtx_minimal_colab.ipynb](notebooks/ovrtx_minimal_colab.ipynb) | NVIDIA OVRTX로 OpenUSD 씬 렌더링 → PNG 저장 | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/00saridon/PhysicalAI/blob/main/notebooks/ovrtx_minimal_colab.ipynb) |
-| [colab_gpu_backend.ipynb](notebooks/colab_gpu_backend.ipynb) | Colab GPU에서 백엔드 기동 + cloudflared 터널 → 대시보드 연결([사용법](#colab-gpu-백엔드-원격-실학습)) | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/00saridon/PhysicalAI/blob/main/notebooks/colab_gpu_backend.ipynb) |
+| [colab_gpu_backend.ipynb](notebooks/colab_gpu_backend.ipynb) | Colab GPU에서 백엔드 기동 + ngrok 터널 → 대시보드 연결([사용법](#colab-gpu-백엔드-원격-실학습)) | [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/00saridon/PhysicalAI/blob/main/notebooks/colab_gpu_backend.ipynb) |
 
 ---
 

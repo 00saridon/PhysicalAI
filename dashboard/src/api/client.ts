@@ -2,7 +2,13 @@ import type { Artifact, PipelineStatus, StageId } from '../types/pipeline'
 import { getApiBase } from './base'
 
 async function _fetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${getApiBase()}${path}`, init)
+  // `ngrok-skip-browser-warning` bypasses ngrok-free's interstitial HTML page
+  // when the backend is an ngrok tunnel (Colab GPU). Harmless for other hosts.
+  // (SSE/EventSource can't set headers, but bypasses via its text/event-stream Accept.)
+  const res = await fetch(`${getApiBase()}${path}`, {
+    ...init,
+    headers: { 'ngrok-skip-browser-warning': 'true', ...(init?.headers ?? {}) },
+  })
   if (!res.ok) {
     const body = await res.text()
     throw new Error(`${res.status} ${res.statusText}: ${body}`)
