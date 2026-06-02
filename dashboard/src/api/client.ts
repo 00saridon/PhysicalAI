@@ -25,6 +25,23 @@ export interface DemoFile {
 
 export type ConfigMap = Record<string, unknown>
 
+export interface GpuStat {
+  name: string
+  util: number | null
+  mem_used: number | null
+  mem_total: number | null
+  temp: number | null
+  power: number | null
+  power_max: number | null
+}
+
+export interface SystemInfo {
+  mode: { mock: boolean; real_available: boolean }
+  pipeline: { running: boolean; stage: string | null }
+  gpu: { available: boolean; gpus?: GpuStat[] }
+  host: { platform: string; python: string; cpu_count: number | null }
+}
+
 export interface Trajectory {
   name: string
   n_total: number
@@ -48,6 +65,7 @@ export const api = {
     return _fetch<{ started: string }>(`/run/${stage}${qs}`, { method: 'POST' })
   },
   stopStage: () => _fetch<{ stopped: StageId | null }>('/stop', { method: 'POST' }),
+  getSystem: () => _fetch<SystemInfo>('/system'),
   getMode: () => _fetch<{ mock: boolean; real_available: boolean }>('/mode'),
   setMode: (mock: boolean) =>
     _fetch<{ mock: boolean; real_available: boolean }>('/mode', {

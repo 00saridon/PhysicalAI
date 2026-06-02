@@ -7,18 +7,25 @@ import { Training } from './pages/Training'
 import { Demos } from './pages/Demos'
 import { Artifacts } from './pages/Artifacts'
 import { Config } from './pages/Config'
+import { Resources, type ResourceKind } from './pages/Resources'
 
 // Lazy-load the 3D page so three.js is split into its own chunk (loaded on demand)
 const Simulation = lazy(() => import('./pages/Simulation').then(m => ({ default: m.Simulation })))
 import { usePipelineStatus, useRunStage, usePipelineMode, useSetMode } from './hooks/usePipeline'
 
-export type NavPage = 'Overview' | 'Run' | 'Training' | 'Demos' | 'Simulation' | 'Artifacts' | 'Config'
+export type NavPage = 'Overview' | 'Run' | 'Training' | 'Resources' | 'Demos' | 'Simulation' | 'Artifacts' | 'Config'
 
-function PageContent({ page, onNav }: { page: NavPage; onNav: (p: NavPage) => void }) {
+function PageContent({ page, onNav, resource, onSelectResource }: {
+  page: NavPage
+  onNav: (p: NavPage) => void
+  resource: ResourceKind
+  onSelectResource: (r: ResourceKind) => void
+}) {
   switch (page) {
     case 'Overview':   return <Overview />
     case 'Run':        return <Run />
     case 'Training':   return <Training onNav={onNav} />
+    case 'Resources':  return <Resources resource={resource} onSelectResource={onSelectResource} />
     case 'Demos':      return <Demos onNav={onNav} />
     case 'Simulation': return (
       <Suspense fallback={<div className="p-8 text-sm text-muted">3D 뷰 로딩 중…</div>}>
@@ -32,6 +39,7 @@ function PageContent({ page, onNav }: { page: NavPage; onNav: (p: NavPage) => vo
 
 export default function App() {
   const [page, setPage] = useState<NavPage>('Overview')
+  const [resource, setResource] = useState<ResourceKind>('gpu')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { data: status } = usePipelineStatus()
   const { mutate: runStage } = useRunStage()
@@ -70,6 +78,8 @@ export default function App() {
         status={status}
         activePage={page}
         onNav={handleNav}
+        resource={resource}
+        onSelectResource={(r) => { setResource(r); handleNav('Resources') }}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />
@@ -87,7 +97,7 @@ export default function App() {
           modePending={modePending}
         />
         <div ref={scrollRef} className="flex-1 overflow-y-auto">
-          <PageContent page={page} onNav={handleNav} />
+          <PageContent page={page} onNav={handleNav} resource={resource} onSelectResource={setResource} />
         </div>
       </div>
     </div>

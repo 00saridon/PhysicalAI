@@ -27,6 +27,14 @@ export function useStopStage() {
   })
 }
 
+export function useSystem() {
+  return useQuery({
+    queryKey: ['system'],
+    queryFn: api.getSystem,
+    refetchInterval: 2000,
+  })
+}
+
 export function usePipelineMode() {
   return useQuery({
     queryKey: ['pipeline-mode'],

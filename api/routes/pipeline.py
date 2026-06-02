@@ -1,9 +1,49 @@
+import os
+import platform
+import subprocess
+
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 router = APIRouter()
 
 VALID_STAGES = {"env", "collect", "il", "rl", "export"}
+
+
+def _num(x: str):
+    try:
+        return float(x)
+    except (TypeError, ValueError):
+        return None
+
+
+def _gpu_info() -> dict:
+    """Query nvidia-smi for live GPU telemetry. Returns {available: False} when
+    there is no NVIDIA GPU (e.g. the Railway CPU deploy) or nvidia-smi is absent."""
+    fields = "name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw,power.limit"
+    try:
+        out = subprocess.run(
+            ["nvidia-smi", f"--query-gpu={fields}", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=4,
+        )
+    except Exception:
+        return {"available": False}
+    if out.returncode != 0 or not out.stdout.strip():
+        return {"available": False}
+    gpus = []
+    for line in out.stdout.strip().splitlines():
+        p = [c.strip() for c in line.split(",")]
+        p += [""] * (7 - len(p))
+        gpus.append({
+            "name": p[0],
+            "util": _num(p[1]),
+            "mem_used": _num(p[2]),
+            "mem_total": _num(p[3]),
+            "temp": _num(p[4]),
+            "power": _num(p[5]),
+            "power_max": _num(p[6]),
+        })
+    return {"available": True, "gpus": gpus}
 
 
 class ModeRequest(BaseModel):
@@ -22,6 +62,22 @@ PREREQS: dict[str, str | None] = {
 async def get_status(request: Request):
     runner = request.app.state.runner
     return {"running": runner.is_running(), "stage": runner.current_stage}
+
+
+@router.get("/api/system")
+async def get_system(request: Request):
+    """Aggregated compute/runtime status for the Resources dashboard."""
+    runner = request.app.state.runner
+    return {
+        "mode": {"mock": runner.mock_mode, "real_available": runner.real_available},
+        "pipeline": {"running": runner.is_running(), "stage": runner.current_stage},
+        "gpu": _gpu_info(),
+        "host": {
+            "platform": platform.system(),
+            "python": platform.python_version(),
+            "cpu_count": os.cpu_count(),
+        },
+    }
 
 
 @router.get("/api/mode")

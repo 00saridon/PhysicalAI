@@ -1,11 +1,22 @@
 import { clsx } from 'clsx'
 import type { PipelineStatus } from '../../types/pipeline'
 import type { NavPage } from '../../App'
+import type { ResourceKind } from '../../pages/Resources'
 
-const NAV_ITEMS: { label: NavPage; icon: string }[] = [
+interface NavItem {
+  label: NavPage
+  icon: string
+  children?: { key: ResourceKind; label: string; icon: string }[]
+}
+
+const NAV_ITEMS: NavItem[] = [
   { label: 'Overview',  icon: '◈' },
   { label: 'Run',       icon: '▶' },
   { label: 'Training',  icon: '📈' },
+  { label: 'Resources', icon: '🖥', children: [
+    { key: 'gpu',   label: 'GPU',       icon: '🖥' },
+    { key: 'colab', label: 'COLAB GPU', icon: '⚡' },
+  ] },
   { label: 'Demos',     icon: '🗄' },
   { label: 'Simulation', icon: '🦾' },
   { label: 'Artifacts', icon: '📦' },
@@ -16,11 +27,13 @@ interface Props {
   status: PipelineStatus | undefined
   activePage: NavPage
   onNav: (page: NavPage) => void
+  resource: ResourceKind
+  onSelectResource: (r: ResourceKind) => void
   isOpen: boolean
   onClose: () => void
 }
 
-export function Sidebar({ status, activePage, onNav, isOpen, onClose }: Props) {
+export function Sidebar({ status, activePage, onNav, resource, onSelectResource, isOpen, onClose }: Props) {
   return (
     <aside className={clsx(
       'w-56 flex-shrink-0 bg-panel border-r border-border flex flex-col z-30 transition-transform duration-300',
@@ -48,20 +61,44 @@ export function Sidebar({ status, activePage, onNav, isOpen, onClose }: Props) {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 p-2 flex flex-col gap-0.5">
+      <nav className="flex-1 p-2 flex flex-col gap-0.5 overflow-y-auto">
         {NAV_ITEMS.map(item => (
-          <div
-            key={item.label}
-            onClick={() => onNav(item.label)}
-            className={clsx(
-              'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm cursor-pointer transition-colors',
-              activePage === item.label
-                ? 'bg-nvidia/10 text-nvidia border border-nvidia/20'
-                : 'text-slate-400 hover:bg-border hover:text-slate-200 border border-transparent'
+          <div key={item.label}>
+            <div
+              onClick={() => onNav(item.label)}
+              className={clsx(
+                'flex items-center gap-2.5 px-3 py-2 rounded-md text-sm cursor-pointer transition-colors',
+                activePage === item.label
+                  ? 'bg-nvidia/10 text-nvidia border border-nvidia/20'
+                  : 'text-slate-400 hover:bg-border hover:text-slate-200 border border-transparent'
+              )}
+            >
+              <span>{item.icon}</span>
+              <span className="font-semibold">{item.label}</span>
+            </div>
+            {/* 하위 항목 (Resources → GPU / COLAB GPU) */}
+            {item.children && (
+              <div className="ml-4 mt-0.5 flex flex-col gap-0.5 border-l border-border pl-2">
+                {item.children.map(child => {
+                  const active = activePage === item.label && resource === child.key
+                  return (
+                    <div
+                      key={child.key}
+                      onClick={() => onSelectResource(child.key)}
+                      className={clsx(
+                        'flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs cursor-pointer transition-colors',
+                        active
+                          ? 'bg-nvidia/10 text-nvidia'
+                          : 'text-slate-500 hover:bg-border hover:text-slate-300'
+                      )}
+                    >
+                      <span className="text-[11px]">{child.icon}</span>
+                      <span className="font-semibold">{child.label}</span>
+                    </div>
+                  )
+                })}
+              </div>
             )}
-          >
-            <span>{item.icon}</span>
-            <span className="font-semibold">{item.label}</span>
           </div>
         ))}
       </nav>
