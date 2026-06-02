@@ -4,10 +4,11 @@ import torch.nn as nn
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
 from trainer.weight_transfer import infer_hidden_dims, il_to_sb3_key_map, copy_weights
+from pipeline_metrics import emit_metric
 
 
 class LogCallback(BaseCallback):
-    """Prints [RL] Step X | rew=Y every log_interval steps for Live Log parsing."""
+    """Emits a structured RL metric (+ a human log line) every log_interval steps."""
     def __init__(self, log_interval: int = 2048):
         super().__init__()
         self.log_interval = log_interval
@@ -17,6 +18,7 @@ class LogCallback(BaseCallback):
             rew = self.locals.get("rewards")
             mean_rew = float(sum(rew) / len(rew)) if rew is not None else 0.0
             print(f"[RL] Step {self.num_timesteps} | rew={mean_rew:.4f}", flush=True)
+            emit_metric(stage="rl", step=int(self.num_timesteps), rew_mean=round(mean_rew, 6))
         return True
 
 

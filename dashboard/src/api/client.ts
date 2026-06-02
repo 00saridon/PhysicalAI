@@ -42,9 +42,10 @@ export const api = {
     const qs = params.toString() ? `?${params}` : ''
     return _fetch<{ started: string }>(`/run/${stage}${qs}`, { method: 'POST' })
   },
-  getMode: () => _fetch<{ mock: boolean }>('/mode'),
+  stopStage: () => _fetch<{ stopped: StageId | null }>('/stop', { method: 'POST' }),
+  getMode: () => _fetch<{ mock: boolean; real_available: boolean }>('/mode'),
   setMode: (mock: boolean) =>
-    _fetch<{ mock: boolean }>('/mode', {
+    _fetch<{ mock: boolean; real_available: boolean }>('/mode', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mock }),

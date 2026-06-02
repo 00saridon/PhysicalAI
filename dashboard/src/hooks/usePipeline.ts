@@ -19,6 +19,14 @@ export function useRunStage() {
   })
 }
 
+export function useStopStage() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.stopStage(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['pipeline-status'] }),
+  })
+}
+
 export function usePipelineMode() {
   return useQuery({
     queryKey: ['pipeline-mode'],

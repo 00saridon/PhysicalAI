@@ -43,6 +43,19 @@ describe('useSSELogs', () => {
     expect(result.current.lines[0].level).toBe('RL')
   })
 
+  it('dedupes replayed lines by SSE id (backfill on reconnect)', async () => {
+    const { result } = renderHook(() => useSSELogs('/api/logs/stream'))
+    const es = MockEventSource.instances[0]
+    const send = (line: string, id: string) =>
+      es._handlers['log']?.({ data: JSON.stringify({ line, ts: 1 }), lastEventId: id } as MessageEvent)
+    act(() => {
+      send('a', '1')
+      send('b', '2')
+      send('a', '1') // replayed backfill — same id, must be ignored
+    })
+    expect(result.current.lines.map(l => l.text)).toEqual(['a', 'b'])
+  })
+
   it('keeps max 200 lines', async () => {
     const { result } = renderHook(() => useSSELogs('/api/logs/stream'))
     const es = MockEventSource.instances[0]

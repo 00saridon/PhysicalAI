@@ -1,4 +1,5 @@
 import asyncio
+import importlib.util
 import json
 import os
 import re
@@ -8,7 +9,21 @@ import time
 from pathlib import Path
 
 from api.event_bus import EventBus
+from pipeline_metrics import parse_metric
 
+
+def real_mode_available() -> bool:
+    """REAL mode runs the actual run.py training pipeline, which needs the heavy
+    ML stack. The slim Railway image omits these on purpose, so REAL mode there
+    would only spawn doomed subprocesses (ModuleNotFoundError: torch). Detect
+    capability via import specs without paying the cost of importing torch."""
+    return all(
+        importlib.util.find_spec(mod) is not None
+        for mod in ("torch", "stable_baselines3")
+    )
+
+# Legacy fallback: scrape metrics from human log text when a stage hasn't been
+# updated to the structured channel (and for the mock log sequences below).
 _RL_RE = re.compile(r"\[RL\]\s+Step\s+(\d+)\s*\|\s*rew=([\d.\-]+)")
 _IL_RE = re.compile(r"\[IL\]\s+Epoch\s+(\d+)\s+loss=([\d.]+)")
 
@@ -87,13 +102,23 @@ class SubprocessRunner:
     def __init__(self):
         self._process: subprocess.Popen | None = None
         self._mock_task: asyncio.Task | None = None
+        self._stopped = False  # set when a run is terminated by the user via stop()
         self.current_stage: str | None = None
-        self.log_bus = EventBus()
-        self.metric_bus = EventBus()
+        # Retain recent log lines so a tab opened mid-run backfills the tail of
+        # the Live Log. Only "log" events are kept (not "done"/"error"/"ping").
+        self.log_bus = EventBus(history_size=300, history_events={"log"})
+        # Retain metric points so a dashboard tab opened mid-run (or re-opened)
+        # backfills the full curve. Only "metric" events are kept; "done"/"error"
+        # are excluded so a late joiner isn't immediately told the run ended.
+        self.metric_bus = EventBus(history_size=2000, history_events={"metric"})
         self._project_root = Path(__file__).parent.parent  # PhysicalAI/
         # mock_mode is the initial default from the environment but can be
         # toggled at runtime via the /api/mode endpoint (dashboard MOCK/REAL).
-        self.mock_mode = os.getenv("MOCK_PIPELINE", "false").strip().lower() == "true"
+        self.real_available = real_mode_available()
+        env_mock = os.getenv("MOCK_PIPELINE", "false").strip().lower() == "true"
+        # Force MOCK where REAL can't actually run (e.g. the slim deploy), so the
+        # pipeline never drifts into a state where every training stage crashes.
+        self.mock_mode = True if not self.real_available else env_mock
 
     def is_running(self) -> bool:
         # mode-independent so a toggle between runs can't mask an active stage
@@ -105,6 +130,11 @@ class SubprocessRunner:
         if self.is_running():
             raise RuntimeError("already running")
         self.current_stage = stage
+        # Re-running a metric-producing stage replays steps from the start, so
+        # drop this stage's old points to avoid a curve that jumps backwards.
+        # The other stage's history is preserved (e.g. IL curve survives an RL re-run).
+        if stage in ("il", "rl"):
+            self.metric_bus.clear_history(stage)
         if self.mock_mode:
             self._mock_task = asyncio.create_task(self._run_mock(stage))
             return
@@ -126,6 +156,29 @@ class SubprocessRunner:
             bufsize=1,
         )
         threading.Thread(target=self._drain, args=(loop,), daemon=True).start()
+
+    async def stop(self) -> None:
+        """Terminate the active run. For a real subprocess we signal it and let
+        the drain thread emit the terminal event when stdout closes; for a mock
+        run we cancel the task and emit the terminal event here."""
+        if self._mock_task is not None and not self._mock_task.done():
+            stage = self.current_stage
+            self._mock_task.cancel()
+            try:
+                await self._mock_task
+            except asyncio.CancelledError:
+                pass
+            self._mock_task = None
+            self.current_stage = None
+            payload = {"stage": stage, "exit_code": -1, "stopped": True}
+            ev = {"event": "done", "data": json.dumps(payload)}
+            await self.log_bus.publish(ev)
+            await self.metric_bus.publish(ev)
+            return
+        if self._process is not None and self._process.returncode is None:
+            self._stopped = True
+            self._process.terminate()
+            # _drain observes stdout EOF + wait(), then emits the terminal event.
 
     async def _run_mock(self, stage: str) -> None:
         logs = _MOCK_LOGS.get(stage, [(1.0, f"[{stage.upper()}] Stage completed (mock)")])
@@ -164,8 +217,19 @@ class SubprocessRunner:
         for raw in proc.stdout:
             text = raw.rstrip()
             ts = int(time.time())
+
+            # Structured metric channel: a sentinel-prefixed JSON line. It carries
+            # the numbers directly, so it's published as a metric and NOT shown in
+            # the Live Log (it's machine noise, not human output).
+            metric = parse_metric(text)
+            if metric is not None:
+                metric.setdefault("ts", ts)
+                publish(self.metric_bus, {"event": "metric", "data": json.dumps(metric)})
+                continue
+
             publish(self.log_bus, {"event": "log", "data": json.dumps({"line": text, "ts": ts})})
 
+            # Fallback: scrape metrics from legacy human log text.
             m = _RL_RE.search(text)
             if m:
                 metric = {"step": int(m.group(1)), "rew_mean": float(m.group(2)), "stage": "rl", "ts": ts}
@@ -178,9 +242,14 @@ class SubprocessRunner:
 
         exit_code = proc.wait()
         stage = self.current_stage
+        stopped = self._stopped
+        self._stopped = False
         self._process = None
         self.current_stage = None
-        if exit_code == 0:
+        if stopped:
+            payload = {"stage": stage, "exit_code": exit_code, "stopped": True}
+            ev = {"event": "done", "data": json.dumps(payload)}
+        elif exit_code == 0:
             payload = {"stage": stage, "exit_code": 0}
             ev = {"event": "done", "data": json.dumps(payload)}
         else:

@@ -9,11 +9,12 @@ interface Props {
   onNewRun: () => void
   running: boolean
   mock: boolean
+  realAvailable: boolean
   onSetMode: (mock: boolean) => void
   modePending?: boolean
 }
 
-export function TopBar({ page, onMenuToggle, onNavHome, onNewRun, running, mock, onSetMode, modePending }: Props) {
+export function TopBar({ page, onMenuToggle, onNavHome, onNewRun, running, mock, realAvailable, onSetMode, modePending }: Props) {
   return (
     <header className="h-12 flex-shrink-0 bg-panel border-b border-border flex items-center px-4 gap-3">
       {/* 모바일 햄버거 버튼 */}
@@ -33,7 +34,7 @@ export function TopBar({ page, onMenuToggle, onNavHome, onNewRun, running, mock,
 
       <div className="flex-1" />
 
-      <ModeToggle mock={mock} onChange={onSetMode} disabled={running || modePending} pending={modePending} />
+      <ModeToggle mock={mock} onChange={onSetMode} disabled={running || modePending} pending={modePending} realAvailable={realAvailable} />
 
       <button
         onClick={onNewRun}

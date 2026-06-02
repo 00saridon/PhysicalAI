@@ -26,7 +26,8 @@ async def get_status(request: Request):
 
 @router.get("/api/mode")
 async def get_mode(request: Request):
-    return {"mock": request.app.state.runner.mock_mode}
+    runner = request.app.state.runner
+    return {"mock": runner.mock_mode, "real_available": runner.real_available}
 
 
 @router.post("/api/mode")
@@ -34,8 +35,14 @@ async def set_mode(body: ModeRequest, request: Request):
     runner = request.app.state.runner
     if runner.is_running():
         raise HTTPException(status_code=409, detail="Cannot change mode while a stage is running")
+    if not body.mock and not runner.real_available:
+        raise HTTPException(
+            status_code=422,
+            detail="REAL mode is unavailable: ML dependencies (torch, stable_baselines3) "
+                   "are not installed in this deployment. The pipeline runs in MOCK mode here.",
+        )
     runner.mock_mode = body.mock
-    return {"mock": runner.mock_mode}
+    return {"mock": runner.mock_mode, "real_available": runner.real_available}
 
 
 @router.post("/api/run/{stage}")
@@ -60,3 +67,13 @@ async def run_stage(stage: str, request: Request, validate: bool = False):
 
     await runner.run(stage, extra_args=extra)
     return {"started": stage}
+
+
+@router.post("/api/stop")
+async def stop_stage(request: Request):
+    runner = request.app.state.runner
+    if not runner.is_running():
+        raise HTTPException(status_code=409, detail="No stage is running")
+    stage = runner.current_stage
+    await runner.stop()
+    return {"stopped": stage}

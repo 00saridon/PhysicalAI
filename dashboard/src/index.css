@@ -6,3 +6,20 @@ body {
   background-color: #0f1117;
   color: #e2e8f0;
 }
+
+/* Allow selecting/copying all dashboard text (Ctrl+C / Ctrl+V) */
+html, body {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Make text inside buttons/cards selectable too (e.g. model/gallery labels) */
+button, [role="button"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+::selection {
+  background: #76b900;
+  color: #04060a;
+}

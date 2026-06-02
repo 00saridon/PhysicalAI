@@ -1,7 +1,21 @@
+import { useQueryClient } from '@tanstack/react-query'
 import type { Stage } from '../types/pipeline'
 import { PipelineBar } from '../components/pipeline/PipelineBar'
-import { usePipelineStatus, useRunStage } from '../hooks/usePipeline'
+import { usePipelineStatus, useRunStage, useStopStage } from '../hooks/usePipeline'
 import { useSSELogs } from '../hooks/useSSELogs'
+
+// _fetch throws "<status> <statusText>: <body>" where body is FastAPI's
+// {"detail": "..."}. Pull the human-readable detail out for the error banner.
+function friendlyError(err: Error): string {
+  const m = err.message.match(/\{.*\}$/)
+  if (m) {
+    try {
+      const detail = JSON.parse(m[0]).detail
+      if (typeof detail === 'string') return detail
+    } catch {}
+  }
+  return err.message
+}
 
 const STAGE_DEFS: Pick<Stage, 'id' | 'name'>[] = [
   { id: 'env', name: 'ENV' },
@@ -20,10 +34,16 @@ const STAGE_DESC: Record<string, string> = {
 }
 
 export function Run() {
+  const qc = useQueryClient()
   const { data: status } = usePipelineStatus()
-  const { mutate: runStage, isPending } = useRunStage()
+  const { mutate: runStage, isPending, error, reset } = useRunStage()
+  const { mutate: stopStage, isPending: isStopping } = useStopStage()
   const apiBase = (import.meta.env.VITE_API_URL ?? '') + '/api'
-  const { lines, connected } = useSSELogs(`${apiBase}/logs/stream`)
+  // When a stage finishes/fails the server emits a terminal SSE event; refetch
+  // status immediately instead of waiting up to 2s for the next poll.
+  const { lines, connected } = useSSELogs(`${apiBase}/logs/stream`, () =>
+    qc.invalidateQueries({ queryKey: ['pipeline-status'] }),
+  )
 
   const stages: Stage[] = STAGE_DEFS.map(def => ({
     ...def,
@@ -45,9 +65,34 @@ export function Run() {
           </p>
         </div>
         {status?.running && (
-          <span className="ml-auto text-xs font-bold px-3 py-1 rounded-full bg-emerald-900 text-emerald-300 animate-pulse">RUNNING</span>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-900 text-emerald-300 animate-pulse">RUNNING</span>
+            <button
+              onClick={() => stopStage()}
+              disabled={isStopping}
+              className="text-xs font-bold px-3 py-1.5 rounded-lg bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white transition-colors"
+            >
+              {isStopping ? '중지 중…' : '■ 중지'}
+            </button>
+          </div>
         )}
       </div>
+
+      {/* 실행 명령 에러 (예: 선행 산출물 누락 422, 이미 실행 중 409) */}
+      {error && (
+        <div className="bg-red-950/60 border border-red-800 rounded-xl p-3 flex items-start gap-3">
+          <span className="text-red-400 text-sm font-bold flex-shrink-0">⚠</span>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-bold text-red-300">스테이지를 시작할 수 없습니다</p>
+            <p className="text-xs text-red-400/90 break-all">{friendlyError(error as Error)}</p>
+          </div>
+          <button
+            onClick={() => reset()}
+            className="flex-shrink-0 text-red-400 hover:text-red-200 text-sm leading-none"
+            aria-label="dismiss"
+          >✕</button>
+        </div>
+      )}
 
       {/* 파이프라인 실행 바 */}
       <PipelineBar

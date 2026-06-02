@@ -4,6 +4,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from trainer.il.policy import MLPPolicy
 from trainer.il.dataloader import DemoDataset
+from pipeline_metrics import emit_metric
 
 
 class BCTrainer:
@@ -26,6 +27,7 @@ class BCTrainer:
         for epoch in range(self.cfg["epochs"]):
             epoch_loss = self._run_epoch()
             print(f"[IL] Epoch {epoch + 1} loss={epoch_loss:.6f}", flush=True)
+            emit_metric(stage="il", step=epoch + 1, loss=round(epoch_loss, 6))
             if epoch_loss < self._best_loss:
                 self._best_loss = epoch_loss
                 self._save("best.pt")

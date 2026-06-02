@@ -18,7 +18,7 @@ function PageContent({ page, onNav }: { page: NavPage; onNav: (p: NavPage) => vo
   switch (page) {
     case 'Overview':   return <Overview />
     case 'Run':        return <Run />
-    case 'Training':   return <Training />
+    case 'Training':   return <Training onNav={onNav} />
     case 'Demos':      return <Demos onNav={onNav} />
     case 'Simulation': return (
       <Suspense fallback={<div className="p-8 text-sm text-muted">3D 뷰 로딩 중…</div>}>
@@ -82,6 +82,7 @@ export default function App() {
           onNewRun={() => runStage({ stage: 'env', validate: true })}
           running={status?.running ?? false}
           mock={mode?.mock ?? true}
+          realAvailable={mode?.real_available ?? true}
           onSetMode={setMode}
           modePending={modePending}
         />

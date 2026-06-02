@@ -4,16 +4,22 @@ import { clsx } from 'clsx'
 import { LogPanel } from '../components/monitoring/LogPanel'
 import { useSSELogs } from '../hooks/useSSELogs'
 import { useSSEMetrics } from '../hooks/useSSEMetrics'
+import { usePipelineStatus } from '../hooks/usePipeline'
+import type { NavPage } from '../App'
 
 type Metric = 'rew_mean' | 'loss'
 
-export function Training() {
+// Stages that actually emit the reward/loss curves this page renders.
+const METRIC_STAGES = new Set(['il', 'rl'])
+
+export function Training({ onNav }: { onNav?: (p: NavPage) => void }) {
   const [metric, setMetric] = useState<Metric>('rew_mean')
+  const { data: status } = usePipelineStatus()
   // use VITE_API_URL like Overview/Run so SSE streams direct to the backend
   // (avoids the Netlify proxy buffering edge case in production)
   const apiBase = (import.meta.env.VITE_API_URL ?? '') + '/api'
   const { lines, connected } = useSSELogs(`${apiBase}/logs/stream`)
-  const { points } = useSSEMetrics(`${apiBase}/metrics/stream`)
+  const { points, connected: metricsLive } = useSSEMetrics(`${apiBase}/metrics/stream`)
 
   const rlPoints = points.filter(p => p.stage === 'rl' && p.rew_mean !== undefined)
   const ilPoints = points.filter(p => p.stage === 'il' && p.loss !== undefined)
@@ -24,8 +30,37 @@ export function Training() {
   const lastRlStep = rlPoints[rlPoints.length - 1]?.step
   const lastIlEpoch = ilPoints[ilPoints.length - 1]?.step
 
+  const running = status?.running ?? false
+  const stage = status?.stage ?? null
+  const metricStageRunning = running && stage !== null && METRIC_STAGES.has(stage)
+
   return (
     <div className="p-5 flex flex-col gap-4">
+      {/* 상태 배너 — Training은 관찰 전용이므로 여기서 파이프라인 상태를 인지하고 Run으로 안내한다 */}
+      <div className="bg-panel border border-border rounded-xl p-4 flex items-center gap-4">
+        <span className={`w-3 h-3 rounded-full flex-shrink-0 ${running ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-slate-200">
+            {running ? `${stage?.toUpperCase()} 실행 중` : '대기 중 (Idle)'}
+          </p>
+          <p className="text-xs text-muted">
+            {metricStageRunning
+              ? '학습 메트릭이 실시간으로 수집되고 있습니다'
+              : running
+                ? 'IL/RL 스테이지가 시작되면 리워드·Loss 곡선이 표시됩니다'
+                : '학습 메트릭을 보려면 Run에서 IL 또는 RL 스테이지를 실행하세요'}
+          </p>
+        </div>
+        {onNav && (
+          <button
+            onClick={() => onNav('Run')}
+            className="ml-auto flex-shrink-0 text-xs font-bold px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
+          >
+            {running ? 'Run에서 보기' : '▶ Run에서 학습 시작'}
+          </button>
+        )}
+      </div>
+
       {/* 요약 KPI */}
       <div className="grid grid-cols-4 gap-3">
         {[
@@ -45,7 +80,12 @@ export function Training() {
       {/* 메트릭 차트 (큰 버전) */}
       <div className="bg-panel border border-border rounded-xl p-4 flex flex-col gap-3">
         <div className="flex items-center justify-between">
-          <p className="text-xs font-bold text-muted uppercase tracking-widest">Training Metrics</p>
+          <div className="flex items-center gap-2">
+            <p className="text-xs font-bold text-muted uppercase tracking-widest">Training Metrics</p>
+            <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${metricsLive ? 'bg-emerald-900 text-emerald-400' : 'bg-slate-800 text-slate-500'}`}>
+              {metricsLive ? 'LIVE' : 'OFFLINE'}
+            </span>
+          </div>
           <div className="flex gap-1">
             {(['rew_mean', 'loss'] as Metric[]).map(m => (
               <button
