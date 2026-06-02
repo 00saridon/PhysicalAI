@@ -69,8 +69,6 @@ export function Resources({ resource, onSelectResource }: {
   const override = getApiOverride()
   const usingColab = !!override
   const activeRoot = getApiRoot() || '(기본/동일 출처)'
-  // The selected resource is "live" only when it matches the active backend.
-  const selectedIsActive = (resource === 'colab' && usingColab) || (resource === 'gpu' && !usingColab)
 
   const [colabUrl, setColabUrl] = useState(override ?? '')
   const [series, setSeries] = useState<Sample[]>([])
@@ -138,33 +136,47 @@ export function Resources({ resource, onSelectResource }: {
         </div>
       </div>
 
-      {/* 연결 패널 — 선택한 자원이 활성 백엔드가 아닐 때 */}
-      {!selectedIsActive && (
-        <div className="bg-panel border border-amber-700/40 rounded-xl p-4 flex flex-col gap-3">
-          <p className="text-xs font-bold text-amber-300">
-            {resource === 'colab' ? 'Colab GPU 백엔드에 연결' : '기본 백엔드로 전환'}
+      {/* 연결 패널 — 선택한 자원에 맞춰 항상 표시 */}
+      {resource === 'colab' ? (
+        <div className="bg-panel border border-border rounded-xl p-4 flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold text-slate-200">Colab GPU 백엔드 연결</p>
+            {usingColab && (
+              <span className={clsx('text-[10px] font-bold px-2 py-0.5 rounded',
+                online ? 'bg-emerald-900 text-emerald-300' : 'bg-red-950 text-red-300')}>
+                {online ? '연결됨' : '오프라인'}
+              </span>
+            )}
+          </div>
+          <p className="text-[11px] text-muted">
+            Colab에서 <code className="text-slate-300">colab_gpu_backend.ipynb</code>를 실행해 나온 ngrok URL을 입력하세요.
+            {usingColab && !online && ' (현재 백엔드에 접속 불가 — 터널이 만료됐으면 새 URL로 교체하세요.)'}
           </p>
-          {resource === 'colab' ? (
-            <>
-              <p className="text-[11px] text-muted">
-                Colab에서 <code className="text-slate-300">colab_gpu_backend.ipynb</code>를 실행해 나온 ngrok URL을 입력하세요.
-              </p>
-              <div className="flex gap-2">
-                <input
-                  value={colabUrl}
-                  onChange={e => setColabUrl(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') connectColab() }}
-                  placeholder="https://xxxx.ngrok-free.dev"
-                  className="flex-1 bg-[#0d1117] border border-border rounded-md px-3 py-1.5 text-xs font-mono text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500"
-                />
-                <button onClick={connectColab} className="text-xs font-bold px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white whitespace-nowrap">연결 (새로고침)</button>
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="text-[11px] text-muted">현재 Colab 백엔드(override)에 연결돼 있습니다. 기본 백엔드로 되돌립니다.</p>
-              <button onClick={useDefault} className="self-start text-xs font-bold px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white">기본 백엔드 사용 (새로고침)</button>
-            </>
+          <div className="flex gap-2">
+            <input
+              value={colabUrl}
+              onChange={e => setColabUrl(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') connectColab() }}
+              placeholder="https://xxxx.ngrok-free.dev"
+              className="flex-1 bg-[#0d1117] border border-border rounded-md px-3 py-1.5 text-xs font-mono text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500"
+            />
+            <button onClick={connectColab} className="text-xs font-bold px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white whitespace-nowrap">연결 (새로고침)</button>
+            {usingColab && (
+              <button onClick={useDefault} className="text-xs font-bold px-3 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 whitespace-nowrap">해제</button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="bg-panel border border-border rounded-xl p-4 flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold text-slate-200">기본(로컬 / Railway) 백엔드</p>
+            {!usingColab && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-900 text-emerald-300">사용 중</span>
+            )}
+          </div>
+          <p className="text-[11px] text-muted font-mono break-all">활성: {activeRoot}</p>
+          {usingColab && (
+            <button onClick={useDefault} className="self-start text-xs font-bold px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white">기본 백엔드로 전환 (override 해제)</button>
           )}
         </div>
       )}
