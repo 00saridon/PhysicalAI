@@ -232,12 +232,38 @@ foreach ($d in 'demos','checkpoints','outputs') { cmd /c mklink /J ".\$d" "C:\ph
 
 | 메뉴 | 기능 |
 |---|---|
-| **Overview** | KPI 카드 · Pipeline Stages · Training Metrics · Live Log · Artifacts |
+| **Overview** | HERO · UI 워크플로우 · 아키텍처 · Pipeline Control · Training Metrics · Live Log · Artifacts |
 | **Run** | 스테이지별 실행 버튼 · 상태 배너 · 실시간 로그 |
 | **Training** | RL Reward / IL Loss 차트 · 학습 지표 KPI |
-| **Demos** | 수집된 HDF5 에피소드 목록 · Collect 실행 |
+| **Demos** | 로봇 모델 갤러리(클릭 → 3D) · 수집된 HDF5 에피소드 목록 · Collect 실행 |
+| **Simulation** | 6종 로봇 3D 재생(Three.js) · 모델 선택 · 재생 컨트롤 · 관절/RGB 텔레메트리 |
 | **Artifacts** | 타입별 필터 (ONNX / HDF5 / PT / ZIP) · 다운로드 |
 | **Config** | `configs/*.yaml` 읽기 전용 뷰어 |
+
+---
+
+## 로봇 모델 라이브러리 (Simulation)
+
+Isaac Lab 쇼룸을 참고한 **6종 로봇 모델**을 3D로 재생합니다. 각 모델은 궤적
+(`outputs/dataset/<name>.hdf5`의 `joint_state`)으로 구동되며, 상단 모델 칩이나
+**Demos 갤러리 카드**로 전환합니다.
+
+| 모델 | 카테고리 | DOF | Isaac Lab cfg | 데이터셋 |
+|---|---|---|---|---|
+| 🦾 Franka 7-DOF Arm | Manipulator | 7 | `FRANKA_PANDA_CFG` | `synthetic_v1` (+RGB·EE) |
+| 🐾 ANYmal-D | Quadruped | 12 | `ANYMAL_D_CFG` | `anymal_v1` |
+| 🐕 Boston Dynamics Spot | Quadruped | 12 | `SPOT_CFG` | `spot_v1` |
+| 🧍 Unitree H1 | Humanoid | 19 | `H1_CFG` | `h1_v1` |
+| 🤖 Unitree G1 | Humanoid | 23 | `G1_CFG` | `g1_v1` |
+| 🚁 Crazyflie | Aerial | 4 | `CRAZYFLIE_CFG` | `crazyflie_v1` |
+
+- **확장**: `dashboard/src/sim/models.tsx`의 `MODELS` 레지스트리에 항목을 추가하면 됩니다
+  (메타데이터 + three.js 컴포넌트). `data-driven`은 궤적으로, `procedural`은 절차적 모션으로 구동.
+- **실데이터 교체**: Isaac Lab에서 `scripts/export_isaaclab_dataset.py --robot <id>` 로 롤아웃을 뽑아
+  `outputs/dataset/<name>.hdf5`에 넣으면 그대로 반영됩니다 (관절 매핑 자동).
+- **계약**: `joint_state[i] = 회전각(rad)` — 동일 스트림으로 Unreal/Unity 리그에 매핑 가능.
+
+> 모델별 Isaac Lab task ID·관절 매핑·Unreal/Unity 연동은 **[docs/ISAACLAB-ASSETS.md](docs/ISAACLAB-ASSETS.md)** 참고.
 
 ---
 
@@ -246,10 +272,10 @@ foreach ($d in 'demos','checkpoints','outputs') { cmd /c mklink /J ".\$d" "C:\ph
 ### `configs/env.yaml`
 
 ```yaml
-mock_mode: true          # Isaac Sim 없이 로컬 테스트
+mock_mode: true          # Isaac Sim 없이 로컬 테스트 (numpy mock 환경)
 robot:
   num_joints: 7
-  has_mobile_base: true
+  has_mobile_base: false  # 7축 고정 암 (action_dim = 7). true면 +base_dof
 sensor:
   rgb:  { enabled: true, width: 224, height: 224 }
   depth: { enabled: true, width: 224, height: 224 }
