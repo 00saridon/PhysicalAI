@@ -988,6 +988,57 @@ function StatCard({
 /* ─────────────────────────────────────────────────────────── */
 /*  Overview Page                                              */
 /* ─────────────────────────────────────────────────────────── */
+/* ─────────────────────────────────────────────────────────── */
+/*  UI Workflow — how the dashboard is used, 4 steps            */
+/* ─────────────────────────────────────────────────────────── */
+const WORKFLOW = [
+  { n: '01', icon: '🎛', title: '모드 선택', sub: 'MOCK / REAL', color: '#76b900',
+    desc: '상단 우측 토글로 파이프라인 실행 모드를 정합니다. MOCK은 의존성 없이 모의 로그·메트릭, REAL은 실제 run.py 서브프로세스를 실행합니다.' },
+  { n: '02', icon: '▶', title: '파이프라인 실행', sub: 'ENV → EXPORT', color: '#00d4ff',
+    desc: 'Pipeline Control에서 ENV·COLLECT·IL·RL·EXPORT를 순서대로 실행합니다. 각 단계는 선행 산출물이 있어야 진행됩니다.' },
+  { n: '03', icon: '📡', title: '실시간 모니터링', sub: 'SSE 스트림', color: '#a855f7',
+    desc: 'Live Log와 Reward/Loss 차트가 SSE로 실시간 갱신됩니다. 실행 상태·학습 지표를 즉시 확인할 수 있습니다.' },
+  { n: '04', icon: '🦾', title: '산출물 · 3D', sub: 'Artifacts · Simulation', color: '#f59e0b',
+    desc: 'ONNX·HDF5·체크포인트를 Artifacts에서 확인·다운로드하고, Simulation에서 학습된 정책 롤아웃을 3D로 재생합니다.' },
+]
+
+function WorkflowSection() {
+  return (
+    <div className="bg-panel border border-border rounded-xl p-5">
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-widest text-muted">UI 워크플로우</p>
+          <p className="text-sm font-bold text-slate-200 mt-0.5">대시보드 사용 4단계</p>
+        </div>
+        <span className="text-[10px] px-2.5 py-1 rounded-full border border-border text-slate-400 font-bold">MOCK · REAL 공통 흐름</span>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {WORKFLOW.map((s, i) => (
+          <div key={s.n} className="relative">
+            <div
+              className="h-full rounded-xl border p-4 flex flex-col gap-2 transition-transform hover:-translate-y-0.5"
+              style={{ borderColor: s.color + '33', background: 'linear-gradient(160deg,#0d1018 0%,#111620 100%)' }}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-2xl leading-none">{s.icon}</span>
+                <span className="text-[11px] font-black font-mono px-1.5 py-0.5 rounded" style={{ color: s.color, background: s.color + '18' }}>{s.n}</span>
+              </div>
+              <div className="mt-1">
+                <p className="text-sm font-black text-slate-100">{s.title}</p>
+                <p className="text-[10px] font-bold mt-0.5" style={{ color: s.color + 'cc' }}>{s.sub}</p>
+              </div>
+              <p className="text-[10px] text-slate-500 leading-relaxed">{s.desc}</p>
+            </div>
+            {i < WORKFLOW.length - 1 && (
+              <span className="hidden lg:flex absolute top-1/2 -right-2.5 -translate-y-1/2 z-10 w-5 h-5 items-center justify-center rounded-full bg-surface border border-border text-slate-500 text-[10px]">→</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function Overview() {
   const { data: status } = usePipelineStatus()
   const { data: artifacts = [] } = useArtifacts()
@@ -1034,7 +1085,7 @@ export function Overview() {
           {/* Left: text */}
           <div>
             {/* Badge row */}
-            <div className="flex flex-wrap items-center gap-2 mb-5">
+            <div className="flex flex-wrap items-center gap-2 mb-6">
               <span className="inline-flex items-center gap-1.5 text-[10px] font-black px-3 py-1 rounded-full bg-nvidia/10 text-nvidia border border-nvidia/30 uppercase tracking-widest">
                 <span className="w-1.5 h-1.5 rounded-full bg-nvidia animate-pulse" />
                 NVIDIA Omniverse
@@ -1042,42 +1093,48 @@ export function Overview() {
               {['Isaac Lab', 'Isaac Sim', 'Sim-to-Real'].map(t => (
                 <span key={t} className="text-[10px] font-bold px-3 py-1 rounded-full bg-slate-800/80 text-slate-400 border border-border uppercase tracking-wider">{t}</span>
               ))}
+              {/* live pipeline pill */}
+              <span className={clsx('inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full border',
+                status?.running ? 'border-nvidia/40 text-nvidia bg-nvidia/10' : 'border-border text-slate-500 bg-slate-800/50')}>
+                <span className={clsx('w-1.5 h-1.5 rounded-full', status?.running ? 'bg-nvidia animate-pulse' : 'bg-slate-600')} />
+                {status?.running ? `${status.stage?.toUpperCase()} RUNNING` : 'IDLE'}
+                {mode && <span className="text-slate-600">·</span>}
+                {mode && <span className={mode.mock ? 'text-emerald-400' : 'text-amber-400'}>{mode.mock ? 'MOCK' : 'REAL'}</span>}
+              </span>
             </div>
 
-            <h1 className="text-4xl font-black leading-tight mb-3 tracking-tight">
+            <h1 className="text-4xl sm:text-5xl font-black leading-[1.05] mb-4 tracking-tight">
               <span className="text-white">Physical AI</span>
               <br />
-              <span className="text-nvidia">Robot Policy Learning</span>
+              <span className="bg-gradient-to-r from-nvidia via-emerald-300 to-nvidia bg-clip-text text-transparent">Robot Policy Learning</span>
             </h1>
 
-            <p className="text-sm text-slate-400 leading-relaxed max-w-xl mb-5">
+            <p className="text-sm sm:text-[15px] text-slate-400 leading-relaxed max-w-xl mb-6">
               NVIDIA Isaac Lab 시뮬레이션 위에서 로봇 정책을 처음부터 훈련하는 End-to-End 파이프라인.
               Behavior Cloning 사전 훈련 후 PPO 강화학습으로 파인튜닝하여 실제 로봇에 바로 배포 가능한{' '}
               <span className="text-nvidia font-semibold">ONNX 정책</span>을 생성합니다.
             </p>
 
-            {/* Feature chips */}
-            <div className="flex flex-wrap gap-2 mb-6">
-              {[
-                'PhysX 5 물리 엔진', 'GPU 4096× 병렬', 'HDF5 데모 저장',
-                'MLP Policy', 'SB3 PPO', 'ONNX opset-18',
-              ].map(tag => (
-                <span key={tag}
-                  className="text-[10px] px-2.5 py-1 rounded border border-nvidia/20 text-nvidia/70 bg-nvidia/5 font-semibold"
-                >{tag}</span>
+            {/* Pipeline stage rail */}
+            <div className="flex flex-wrap items-center gap-1.5 mb-7">
+              {['ENV', 'COLLECT', 'IL', 'RL', 'EXPORT'].map((s, i) => (
+                <span key={s} className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-black font-mono px-2 py-1 rounded-md border border-nvidia/20 text-nvidia/80 bg-nvidia/5">{s}</span>
+                  {i < 4 && <span className="text-slate-600 text-[10px]">→</span>}
+                </span>
               ))}
             </div>
 
             {/* CTA */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4">
               <button
                 onClick={() => runStage({ stage: 'env', validate: true })}
                 disabled={status?.running}
                 className={clsx(
-                  'flex items-center gap-2 px-5 py-2.5 rounded-lg font-bold text-sm transition-all',
+                  'flex items-center gap-2 px-6 py-3 rounded-lg font-bold text-sm transition-all',
                   status?.running
                     ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                    : 'bg-nvidia hover:bg-nvidia/90 text-black shadow-lg shadow-nvidia/20'
+                    : 'bg-nvidia hover:bg-nvidia/90 text-black shadow-lg shadow-nvidia/25 hover:shadow-nvidia/40'
                 )}
               >
                 {status?.running ? (
@@ -1090,7 +1147,7 @@ export function Overview() {
                 href="https://isaac-sim.github.io/IsaacLab/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs text-slate-500 hover:text-nvidia transition-colors underline underline-offset-4"
+                className="text-xs font-semibold text-slate-500 hover:text-nvidia transition-colors underline underline-offset-4 decoration-slate-700 hover:decoration-nvidia"
               >
                 Isaac Lab 공식 문서 →
               </a>
@@ -1119,6 +1176,9 @@ export function Overview() {
 
       {/* ── CONTENT ── */}
       <div className="flex-1 p-3 sm:p-6 flex flex-col gap-4 sm:gap-5">
+
+        {/* UI Workflow (how to use the dashboard) */}
+        <WorkflowSection />
 
         {/* Pipeline Architecture Diagram */}
         <PipelineArchDiagram />

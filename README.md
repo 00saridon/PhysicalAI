@@ -227,6 +227,8 @@ foreach ($d in 'demos','checkpoints','outputs') { cmd /c mklink /J ".\$d" "C:\ph
 
 ## 대시보드 페이지
 
+> UI 화면 구성과 동작 흐름(워크플로우·상태 머신·API)은 **[docs/UI-FLOW.md](docs/UI-FLOW.md)** 에 체계적으로 정리되어 있습니다.
+
 | 메뉴 | 기능 |
 |---|---|
 | **Overview** | KPI 카드 · Pipeline Stages · Training Metrics · Live Log · Artifacts |
