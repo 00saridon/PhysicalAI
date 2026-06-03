@@ -9,6 +9,13 @@ export type ResourceKind = 'gpu' | 'colab'
 
 const NV = '#76b900'
 const STAGES = ['env', 'collect', 'il', 'rl', 'export'] as const
+const COLAB_NB_URL = 'https://colab.research.google.com/github/00saridon/PhysicalAI/blob/main/notebooks/colab_gpu_backend.ipynb'
+
+/** Open the Colab notebook in a popup window (falls back to a new tab if blocked). */
+function openColabNotebook() {
+  const w = window.open(COLAB_NB_URL, 'colab_gpu_backend', 'popup=yes,width=1180,height=840')
+  if (!w) window.open(COLAB_NB_URL, '_blank', 'noopener')
+}
 
 interface Sample { t: string; util: number; mem: number }
 
@@ -160,9 +167,20 @@ export function Resources({ resource, onSelectResource }: {
               </span>
             )}
           </div>
+          {/* Colab 노트북 팝업 열기 */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={openColabNotebook}
+              className="text-xs font-bold px-3 py-1.5 rounded-md bg-nvidia/20 border border-nvidia/40 text-nvidia hover:bg-nvidia/30 transition-colors"
+            >📓 Colab Notebook 열기 (팝업)</button>
+            <span className="text-[10px] text-muted">
+              팝업에서 토큰 입력 → <b className="text-slate-300">런타임 → 모두 실행(Run all)</b>
+            </span>
+          </div>
           <p className="text-[11px] text-muted">
-            Colab에서 <code className="text-slate-300">colab_gpu_backend.ipynb</code>를 <b>Run all</b>로 실행하면,
-            노트북이 ngrok URL을 자동 등록하고 아래 <b>자동 연결</b>이 켜져 있으면 대시보드가 알아서 붙습니다 (복붙 불필요).
+            노트북이 ngrok URL을 자동 등록하고, 아래 <b>자동 연결</b>이 켜져 있으면 대시보드가 알아서 붙습니다 (복붙 불필요).
+            <br />
+            <span className="text-slate-500">※ Colab은 보안상 외부에서 셀 자동실행이 불가해, 팝업에서 Run all 한 번만 눌러 주세요.</span>
             {usingColab && !online && ' (현재 백엔드 접속 불가 — 터널이 만료됐으면 노트북을 다시 실행하세요.)'}
           </p>
           <label className="flex items-center gap-2 text-[11px] text-slate-300 select-none">
