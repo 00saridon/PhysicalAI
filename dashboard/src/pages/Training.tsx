@@ -6,6 +6,7 @@ import { useSSELogs } from '../hooks/useSSELogs'
 import { useSSEMetrics } from '../hooks/useSSEMetrics'
 import { usePipelineStatus } from '../hooks/usePipeline'
 import { getApiBase } from '../api/base'
+import { ResourceBadge } from '../components/ui/ResourceBadge'
 import type { NavPage } from '../App'
 
 type Metric = 'rew_mean' | 'loss'
@@ -37,6 +38,9 @@ export function Training({ onNav }: { onNav?: (p: NavPage) => void }) {
 
   return (
     <div className="p-5 flex flex-col gap-4">
+      {/* 자원(CPU/GPU/Colab GPU) 표기 */}
+      <ResourceBadge className="self-start" />
+
       {/* 상태 배너 — Training은 관찰 전용이므로 여기서 파이프라인 상태를 인지하고 Run으로 안내한다 */}
       <div className="bg-panel border border-border rounded-xl p-4 flex items-center gap-4">
         <span className={`w-3 h-3 rounded-full flex-shrink-0 ${running ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
