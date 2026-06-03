@@ -20,7 +20,21 @@ def _num(x: str):
 
 def _gpu_info() -> dict:
     """Query nvidia-smi for live GPU telemetry. Returns {available: False} when
-    there is no NVIDIA GPU (e.g. the Railway CPU deploy) or nvidia-smi is absent."""
+    there is no NVIDIA GPU (e.g. the Railway CPU deploy) or nvidia-smi is absent.
+
+    Set FAKE_GPU=1 to return synthetic, slightly varying telemetry — handy for
+    demoing/developing the Resources GPU dashboard on a machine without a GPU."""
+    if os.getenv("FAKE_GPU", "").strip().lower() in ("1", "true", "yes"):
+        import random
+        return {"available": True, "gpus": [{
+            "name": "Tesla T4 (simulated)",
+            "util": round(random.uniform(30, 95)),
+            "mem_used": round(random.uniform(6000, 13000)),
+            "mem_total": 15360,
+            "temp": round(random.uniform(55, 78)),
+            "power": round(random.uniform(35, 68), 1),
+            "power_max": 70,
+        }]}
     fields = "name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw,power.limit"
     try:
         out = subprocess.run(
