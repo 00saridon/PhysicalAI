@@ -43,6 +43,12 @@ export function getApiBase(): string {
   return getApiRoot() + '/api'
 }
 
+/** The build-time backend API base, ignoring any runtime override. Used for the
+ *  Colab registry so the dashboard can discover a tunnel even while pointed at one. */
+export function getDefaultApiBase(): string {
+  return stripTrailingSlash((import.meta.env.VITE_API_URL as string | undefined) ?? '') + '/api'
+}
+
 /** Persist (or clear, when empty) a backend override at runtime. */
 export function setApiOverride(url: string): void {
   try {

@@ -181,6 +181,24 @@ async def test_set_mode_rejects_real_when_unavailable():
 
 
 @pytest.mark.anyio
+async def test_colab_register_and_latest():
+    app.state.colab = {"url": None, "ts": 0}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        assert (await client.get("/api/colab/latest")).json()["url"] is None
+        r = await client.post("/api/colab/register", json={"url": "https://x.ngrok-free.dev/"})
+        assert r.status_code == 200
+        assert r.json()["url"] == "https://x.ngrok-free.dev"  # trailing slash trimmed
+        assert (await client.get("/api/colab/latest")).json()["url"] == "https://x.ngrok-free.dev"
+
+
+@pytest.mark.anyio
+async def test_colab_register_rejects_non_http():
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        r = await client.post("/api/colab/register", json={"url": "ftp://nope"})
+    assert r.status_code == 422
+
+
+@pytest.mark.anyio
 async def test_run_unknown_stage_returns_422():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         r = await client.post("/api/run/unknown_stage")

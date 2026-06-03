@@ -9,6 +9,8 @@ from api.routes.dataset import router as dataset_router
 
 app = FastAPI(title="PhysicalAI Dashboard API")
 app.state.runner = SubprocessRunner()
+# Latest self-registered Colab GPU backend URL (see /api/colab/register).
+app.state.colab = {"url": None, "ts": 0}
 
 # CORS: 로컬 개발 + Netlify 프로덕션(프리뷰 포함) 허용
 # ALLOWED_ORIGINS 환경변수로 추가 도메인 지정 가능 (쉼표 구분)

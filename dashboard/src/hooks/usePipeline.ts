@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
+import { getDefaultApiBase } from '../api/base'
 import type { StageId } from '../types/pipeline'
 
 export function usePipelineStatus() {
@@ -24,6 +25,24 @@ export function useStopStage() {
   return useMutation({
     mutationFn: () => api.stopStage(),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['pipeline-status'] }),
+  })
+}
+
+/** Polls the build-time (Railway) backend for the latest self-registered Colab
+ *  GPU URL, so the dashboard can auto-connect after the notebook runs. */
+export function useColabLatest(enabled: boolean) {
+  return useQuery({
+    queryKey: ['colab-latest'],
+    enabled,
+    refetchInterval: 4000,
+    queryFn: async (): Promise<{ url: string | null; ts: number }> => {
+      const res = await fetch(`${getDefaultApiBase()}/colab/latest`, {
+        headers: { 'ngrok-skip-browser-warning': 'true' },
+        cache: 'no-store',
+      })
+      if (!res.ok) throw new Error(`${res.status}`)
+      return res.json()
+    },
   })
 }
 

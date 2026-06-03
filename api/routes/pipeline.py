@@ -1,6 +1,7 @@
 import os
 import platform
 import subprocess
+import time
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
@@ -48,6 +49,26 @@ def _gpu_info() -> dict:
 
 class ModeRequest(BaseModel):
     mock: bool
+
+
+class ColabReg(BaseModel):
+    url: str
+
+
+@router.post("/api/colab/register")
+async def colab_register(body: ColabReg, request: Request):
+    """A Colab GPU backend self-registers its public (ngrok) URL here so the
+    dashboard can auto-discover and connect to it without manual copy-paste."""
+    url = body.url.strip().rstrip("/")
+    if not (url.startswith("http://") or url.startswith("https://")):
+        raise HTTPException(status_code=422, detail="url must start with http:// or https://")
+    request.app.state.colab = {"url": url, "ts": int(time.time())}
+    return {"ok": True, "url": url}
+
+
+@router.get("/api/colab/latest")
+async def colab_latest(request: Request):
+    return getattr(request.app.state, "colab", None) or {"url": None, "ts": 0}
 
 PREREQS: dict[str, str | None] = {
     "env": None,

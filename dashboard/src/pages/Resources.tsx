@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { clsx } from 'clsx'
-import { useSystem } from '../hooks/usePipeline'
+import { useSystem, useColabLatest } from '../hooks/usePipeline'
 import { getApiRoot, getApiOverride, setApiOverride } from '../api/base'
 import type { GpuStat } from '../api/client'
 
@@ -73,6 +73,18 @@ export function Resources({ resource, onSelectResource }: {
   const [colabUrl, setColabUrl] = useState(override ?? '')
   const [series, setSeries] = useState<Sample[]>([])
   const lastUpdate = useRef(0)
+
+  // Auto-discover the Colab backend the notebook self-registers, and (optionally)
+  // connect to it automatically — no copy-paste of the ngrok URL.
+  const [autoConnect, setAutoConnect] = useState(true)
+  const { data: latest } = useColabLatest(resource === 'colab')
+  const detected = latest?.url && latest.url !== override ? latest.url : null
+  useEffect(() => {
+    if (resource === 'colab' && autoConnect && detected) {
+      setApiOverride(detected)
+      window.location.reload()
+    }
+  }, [resource, autoConnect, detected])
 
   // Sample GPU telemetry on every successful poll for the live graph.
   useEffect(() => {
@@ -149,9 +161,23 @@ export function Resources({ resource, onSelectResource }: {
             )}
           </div>
           <p className="text-[11px] text-muted">
-            Colab에서 <code className="text-slate-300">colab_gpu_backend.ipynb</code>를 실행해 나온 ngrok URL을 입력하세요.
-            {usingColab && !online && ' (현재 백엔드에 접속 불가 — 터널이 만료됐으면 새 URL로 교체하세요.)'}
+            Colab에서 <code className="text-slate-300">colab_gpu_backend.ipynb</code>를 <b>Run all</b>로 실행하면,
+            노트북이 ngrok URL을 자동 등록하고 아래 <b>자동 연결</b>이 켜져 있으면 대시보드가 알아서 붙습니다 (복붙 불필요).
+            {usingColab && !online && ' (현재 백엔드 접속 불가 — 터널이 만료됐으면 노트북을 다시 실행하세요.)'}
           </p>
+          <label className="flex items-center gap-2 text-[11px] text-slate-300 select-none">
+            <input type="checkbox" checked={autoConnect} onChange={e => setAutoConnect(e.target.checked)} className="accent-indigo-500" />
+            새 Colab URL 자동 감지·연결
+          </label>
+          {detected && (
+            <div className="flex items-center gap-2 text-[11px] bg-emerald-950/50 border border-emerald-800 rounded-md px-3 py-2">
+              <span className="text-emerald-300 font-bold">새 백엔드 감지</span>
+              <span className="font-mono text-emerald-200/90 truncate flex-1">{detected}</span>
+              <button onClick={() => { setApiOverride(detected); window.location.reload() }}
+                      className="text-[10px] font-bold px-2 py-1 rounded bg-emerald-700 hover:bg-emerald-600 text-white whitespace-nowrap">지금 연결</button>
+            </div>
+          )}
+          <p className="text-[10px] text-muted">또는 수동 입력:</p>
           <div className="flex gap-2">
             <input
               value={colabUrl}
