@@ -8,6 +8,7 @@ import { Demos } from './pages/Demos'
 import { Artifacts } from './pages/Artifacts'
 import { Config } from './pages/Config'
 import { Resources, type ResourceKind } from './pages/Resources'
+import { consumeLanding } from './api/base'
 
 // Lazy-load the 3D page so three.js is split into its own chunk (loaded on demand)
 const Simulation = lazy(() => import('./pages/Simulation').then(m => ({ default: m.Simulation })))
@@ -47,11 +48,17 @@ export default function App() {
   const { mutate: setMode, isPending: modePending } = useSetMode()
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // On first load / refresh, always land on the Overview hero (top), not wherever
-  // the browser tries to restore the inner scroll container to.
+  // On first load / refresh, land on the Overview hero (top) — unless a backend
+  // switch asked us to stay put (e.g. Resources → COLAB GPU auto-connect reload).
   useEffect(() => {
     if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
-    setPage('Overview')
+    const landing = consumeLanding()
+    if (landing?.page) {
+      setPage(landing.page as NavPage)
+      if (landing.resource) setResource(landing.resource as ResourceKind)
+    } else {
+      setPage('Overview')
+    }
     const el = scrollRef.current
     el?.scrollTo({ top: 0 })
     // guard against the browser restoring the container's scroll a frame later

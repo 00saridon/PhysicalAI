@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { clsx } from 'clsx'
 import { api } from '../api/client'
 import type { ConfigMap } from '../api/client'
-import { getApiRoot, getApiOverride, setApiOverride } from '../api/base'
+import { getApiRoot, getApiOverride, setApiOverride, reloadWithLanding } from '../api/base'
 
 function renderValue(val: unknown, depth = 0): React.ReactNode {
   if (val === null || val === undefined) return <span className="text-slate-600">null</span>
@@ -51,7 +51,7 @@ export function Config() {
   const activeRoot = getApiRoot()
   const applyBackend = () => {
     setApiOverride(backendInput)
-    window.location.reload()  // re-resolve API base + reconnect SSE against the new backend
+    reloadWithLanding('Config')  // re-resolve API base + reconnect SSE, staying on Config
   }
 
   const keys = Object.keys(config)
@@ -88,7 +88,7 @@ export function Config() {
             className="text-xs font-bold px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white transition-colors whitespace-nowrap"
           >적용 (새로고침)</button>
           <button
-            onClick={() => { setApiOverride(''); window.location.reload() }}
+            onClick={() => { setApiOverride(''); reloadWithLanding('Config') }}
             className="text-xs font-bold px-3 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors whitespace-nowrap"
           >초기화</button>
         </div>

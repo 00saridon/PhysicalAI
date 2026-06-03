@@ -60,6 +60,31 @@ export function setApiOverride(url: string): void {
   }
 }
 
+// Connecting to a different backend requires a full reload (re-init API base +
+// SSE). Persist the page to land on across that reload so the user stays where
+// they were (e.g. Resources → COLAB GPU) instead of bouncing to Overview.
+const LANDING_KEY = 'physicalai.landing'
+
+export function reloadWithLanding(page: string, resource?: string): void {
+  try {
+    sessionStorage.setItem(LANDING_KEY, JSON.stringify({ page, resource }))
+  } catch {
+    /* ignore */
+  }
+  window.location.reload()
+}
+
+export function consumeLanding(): { page: string; resource?: string } | null {
+  try {
+    const v = sessionStorage.getItem(LANDING_KEY)
+    if (!v) return null
+    sessionStorage.removeItem(LANDING_KEY)
+    return JSON.parse(v)
+  } catch {
+    return null
+  }
+}
+
 /** The active override, or null when falling back to the build-time default. */
 export function getApiOverride(): string | null {
   if (typeof window === 'undefined') return null

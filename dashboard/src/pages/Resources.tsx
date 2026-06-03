@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { clsx } from 'clsx'
 import { useSystem, useColabLatest } from '../hooks/usePipeline'
-import { getApiRoot, getApiOverride, setApiOverride } from '../api/base'
+import { getApiRoot, getApiOverride, setApiOverride, reloadWithLanding } from '../api/base'
 import type { GpuStat } from '../api/client'
 
 export type ResourceKind = 'gpu' | 'colab'
@@ -89,7 +89,7 @@ export function Resources({ resource, onSelectResource }: {
   useEffect(() => {
     if (resource === 'colab' && autoConnect && detected) {
       setApiOverride(detected)
-      window.location.reload()
+      reloadWithLanding('Resources', 'colab')
     }
   }, [resource, autoConnect, detected])
 
@@ -106,8 +106,8 @@ export function Resources({ resource, onSelectResource }: {
     })
   }, [q.dataUpdatedAt, sys])
 
-  const connectColab = () => { setApiOverride(colabUrl); window.location.reload() }
-  const useDefault = () => { setApiOverride(''); window.location.reload() }
+  const connectColab = () => { setApiOverride(colabUrl); reloadWithLanding('Resources', 'colab') }
+  const useDefault = () => { setApiOverride(''); reloadWithLanding('Resources', resource) }
 
   const gpu: GpuStat | undefined = sys?.gpu?.available ? sys?.gpu?.gpus?.[0] : undefined
   const online = q.isSuccess
@@ -191,7 +191,7 @@ export function Resources({ resource, onSelectResource }: {
             <div className="flex items-center gap-2 text-[11px] bg-emerald-950/50 border border-emerald-800 rounded-md px-3 py-2">
               <span className="text-emerald-300 font-bold">새 백엔드 감지</span>
               <span className="font-mono text-emerald-200/90 truncate flex-1">{detected}</span>
-              <button onClick={() => { setApiOverride(detected); window.location.reload() }}
+              <button onClick={() => { setApiOverride(detected); reloadWithLanding('Resources', 'colab') }}
                       className="text-[10px] font-bold px-2 py-1 rounded bg-emerald-700 hover:bg-emerald-600 text-white whitespace-nowrap">지금 연결</button>
             </div>
           )}
