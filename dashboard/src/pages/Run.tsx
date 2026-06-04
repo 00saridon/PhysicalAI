@@ -3,12 +3,18 @@ import type { Stage } from '../types/pipeline'
 import { PipelineBar } from '../components/pipeline/PipelineBar'
 import { usePipelineStatus, useRunStage, useStopStage } from '../hooks/usePipeline'
 import { useSSELogs } from '../hooks/useSSELogs'
-import { getApiBase } from '../api/base'
+import { getApiBase, getApiRoot } from '../api/base'
 import { ResourceBadge } from '../components/ui/ResourceBadge'
 
 // _fetch throws "<status> <statusText>: <body>" where body is FastAPI's
 // {"detail": "..."}. Pull the human-readable detail out for the error banner.
 function friendlyError(err: Error): string {
+  // TypeError "Failed to fetch" = the request never reached the backend
+  // (offline backend, dead tunnel, or CORS), not an HTTP error.
+  if (/failed to fetch|networkerror|load failed/i.test(err.message)) {
+    return `백엔드에 연결할 수 없습니다 (${getApiRoot() || '기본 백엔드'}). ` +
+           `백엔드가 오프라인이거나 주소가 잘못됐습니다 — Resources에서 GPU(기본)로 전환하거나 백엔드를 다시 연결하세요.`
+  }
   const m = err.message.match(/\{.*\}$/)
   if (m) {
     try {

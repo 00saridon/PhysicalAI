@@ -8,7 +8,7 @@ import { Demos } from './pages/Demos'
 import { Artifacts } from './pages/Artifacts'
 import { Config } from './pages/Config'
 import { Resources, type ResourceKind } from './pages/Resources'
-import { consumeLanding } from './api/base'
+import { consumeLanding, getApiOverride, setApiOverride, reloadWithLanding } from './api/base'
 
 // Lazy-load the 3D page so three.js is split into its own chunk (loaded on demand)
 const Simulation = lazy(() => import('./pages/Simulation').then(m => ({ default: m.Simulation })))
@@ -71,6 +71,18 @@ export default function App() {
     scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  // Selecting "GPU" means the default backend, so drop any (possibly dead) Colab
+  // override and switch to it — otherwise Run would keep hitting the dead tunnel.
+  const selectResource = (r: ResourceKind) => {
+    if (r === 'gpu' && getApiOverride()) {
+      setApiOverride('')
+      reloadWithLanding('Resources', 'gpu')
+      return
+    }
+    setResource(r)
+    handleNav('Resources')
+  }
+
   return (
     <div className="h-screen flex overflow-hidden bg-surface text-slate-200">
       {/* Mobile overlay */}
@@ -86,7 +98,7 @@ export default function App() {
         activePage={page}
         onNav={handleNav}
         resource={resource}
-        onSelectResource={(r) => { setResource(r); handleNav('Resources') }}
+        onSelectResource={selectResource}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />
@@ -104,7 +116,7 @@ export default function App() {
           modePending={modePending}
         />
         <div ref={scrollRef} className="flex-1 overflow-y-auto">
-          <PageContent page={page} onNav={handleNav} resource={resource} onSelectResource={setResource} />
+          <PageContent page={page} onNav={handleNav} resource={resource} onSelectResource={selectResource} />
         </div>
       </div>
     </div>
