@@ -50,11 +50,11 @@ export async function streamSSE(url: string, opts: SSEOptions): Promise<void> {
         return
       }
       buf += decoder.decode(value, { stream: true })
-      let sep: number
-      // SSE events are separated by a blank line
-      while ((sep = buf.indexOf('\n\n')) >= 0) {
-        const block = buf.slice(0, sep)
-        buf = buf.slice(sep + 2)
+      // SSE events are separated by a blank line — handle LF, CRLF, and CR.
+      let m: RegExpMatchArray | null
+      while ((m = buf.match(/\r\n\r\n|\n\n|\r\r/)) && m.index !== undefined) {
+        const block = buf.slice(0, m.index)
+        buf = buf.slice(m.index + m[0].length)
         const e = parseBlock(block)
         opts.onMessage(e)
         if (e.event === 'done' || e.event === 'error') {

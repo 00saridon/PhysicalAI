@@ -12,20 +12,21 @@ export function useSSEMetrics(url: string): { points: MetricPoint[]; connected: 
   const seen = useRef<Set<string>>(new Set())
 
   useEffect(() => {
-    const ac = new AbortController()
-    let cancelled = false
-    let retryDelay = 1000
+    // `active` guards every async callback so a torn-down effect (React StrictMode
+    // dev double-mount, navigation) can't update state or schedule reconnects.
+    let active = true
+    let retry = 1000
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let ac: AbortController | null = null
 
-    function run() {
-      if (cancelled) return
-      streamSSE(url, {
+    const connect = () => {
+      if (!active) return
+      ac = new AbortController()
+      void streamSSE(url, {
         signal: ac.signal,
-        onOpen: () => {
-          setConnected(true)
-          retryDelay = 1000
-        },
+        onOpen: () => { if (active) { setConnected(true); retry = 1000 } },
         onMessage: (e) => {
-          if (e.event !== 'metric') return
+          if (!active || e.event !== 'metric') return
           try {
             const point = JSON.parse(e.data) as MetricPoint
             const key = `${point.stage}:${point.step}`
@@ -38,19 +39,21 @@ export function useSSEMetrics(url: string): { points: MetricPoint[]; connected: 
           } catch {}
         },
         onClose: (reconnect) => {
+          if (!active) return
           setConnected(false)
-          if (!cancelled && reconnect) {
-            setTimeout(run, Math.min(retryDelay, 4000))
-            retryDelay = Math.min(retryDelay * 2, 4000)
+          if (reconnect) {
+            timer = setTimeout(connect, Math.min(retry, 4000))
+            retry = Math.min(retry * 2, 4000)
           }
         },
       })
     }
 
-    run()
+    connect()
     return () => {
-      cancelled = true
-      ac.abort()
+      active = false
+      if (timer) clearTimeout(timer)
+      ac?.abort()
     }
   }, [url])
 

@@ -19,19 +19,21 @@ export function useSSELogs(
   const seen = useRef<Set<string>>(new Set())
 
   useEffect(() => {
-    const ac = new AbortController()
-    let cancelled = false
-    let retryDelay = 1000
+    // `active` guards every async callback so a torn-down effect (e.g. React
+    // StrictMode's dev double-mount) can't update state or schedule reconnects.
+    let active = true
+    let retry = 1000
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let ac: AbortController | null = null
 
-    function run() {
-      if (cancelled) return
-      streamSSE(url, {
+    const connect = () => {
+      if (!active) return
+      ac = new AbortController()
+      void streamSSE(url, {
         signal: ac.signal,
-        onOpen: () => {
-          setConnected(true)
-          retryDelay = 1000
-        },
+        onOpen: () => { if (active) { setConnected(true); retry = 1000 } },
         onMessage: (e) => {
+          if (!active) return
           if (e.event === 'log') {
             if (e.id) {
               if (seen.current.has(e.id)) return
@@ -45,23 +47,25 @@ export function useSSELogs(
               })
             } catch {}
           } else if (e.event === 'done' || e.event === 'error') {
-            onTerminalRef.current?.() // stage finished/failed — let callers flip status now
+            onTerminalRef.current?.()
           }
         },
         onClose: (reconnect) => {
+          if (!active) return
           setConnected(false)
-          if (!cancelled && reconnect) {
-            setTimeout(run, Math.min(retryDelay, 4000))
-            retryDelay = Math.min(retryDelay * 2, 4000)
+          if (reconnect) {
+            timer = setTimeout(connect, Math.min(retry, 4000))
+            retry = Math.min(retry * 2, 4000)
           }
         },
       })
     }
 
-    run()
+    connect()
     return () => {
-      cancelled = true
-      ac.abort()
+      active = false
+      if (timer) clearTimeout(timer)
+      ac?.abort()
     }
   }, [url])
 
