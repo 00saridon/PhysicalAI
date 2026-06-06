@@ -50,3 +50,8 @@ class DatasetBuilder:
             f.create_dataset("action", data=np.stack(all_actions).astype(np.float32))
             f.create_dataset("reward", data=np.array(all_rewards, dtype=np.float32))
         print(f"[EXPORT] Saved {total_steps} frames → {self.output_path}", flush=True)
+
+        # Promote the raw file to a catalog product (DaaS): write a manifest
+        # sidecar with stats + checksum so it appears in /api/catalog.
+        from export.manifest import write_manifest
+        write_manifest(self.output_path, episodes=n_rollouts)

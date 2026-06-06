@@ -60,6 +60,30 @@
 
 ---
 
+## ODIN 플랫폼 — 3대 비즈니스 모델
+
+학습 파이프라인 위에 상업화 레이어(**ODIN Corp.**)를 올려, 하나의 파이프라인 산출물을
+세 가지 매출원으로 전환합니다. 셋은 **데이터 → 학습 → 정책**으로 이어지는 닫힌 가치 사슬을 이룹니다.
+
+| # | 모델 | 무엇을 파는가 | 페이지 |
+|---|---|---|---|
+| **#1** | **DaaS** (Data-as-a-Service) | 합성 데이터셋 + 주문형 변형 생성 | **Datasets** |
+| **#2** | **Robotics MLOps SaaS** | 실험 추적·레지스트리·GPU 사용량 구독 과금 | **MLOps** |
+| **#3** | **Skill/Policy Marketplace** | 학습된 정책(ONNX)을 계보·성능 기반으로 | **Marketplace** |
+
+```
+파이프라인 ─┬─ 합성 데이터 ──▶ #1 판매 ──▶ #2 그 데이터로 학습 ──▶ #3 정책 판매
+            └─ 학습 정책 ─────────────────────────────────────────▲ (등록 핸드오프)
+```
+
+- 공통 인프라(매니페스트 사이드카 + entitlements 원장 + Stripe/mock billing)를 공유.
+- 핵심 연결고리는 **#2 → #3 핸드오프**: `POST /api/experiments/{id}/register` 한 번이
+  실험의 메트릭·데이터 계보를 들고 판매 가능한 정책을 생성합니다.
+
+> 전체 아키텍처·가치 사슬·엔드포인트·결제 운영은 **[docs/ODIN-PLATFORM.md](docs/ODIN-PLATFORM.md)** 참고.
+
+---
+
 ## 디렉터리 구조
 
 3-계층(ML 파이프라인 · 백엔드 API · 프론트엔드)으로 구성됩니다.
@@ -268,6 +292,9 @@ foreach ($d in 'demos','checkpoints','outputs') { cmd /c mklink /J ".\$d" "C:\ph
 | **Training** | RL Reward / IL Loss 차트 · 학습 지표 KPI |
 | **Demos** | 로봇 모델 갤러리(클릭 → 3D) · 수집된 HDF5 에피소드 목록 · Collect 실행 |
 | **Simulation** | 6종 로봇 3D 재생(Three.js) · 모델 선택 · 재생 컨트롤 · 관절/RGB 텔레메트리 |
+| **Datasets** | #1 DaaS 스토어프론트 · 합성 데이터셋 구매 · 주문형 변형 생성 |
+| **Marketplace** | #3 정책 마켓 · 계보·성능 기반 ONNX 정책 구매 |
+| **MLOps** | #2 MLOps 콘솔 · 학습 제출·리더보드·사용량 미터·정책 등록 |
 | **Artifacts** | 타입별 필터 (ONNX / HDF5 / PT / ZIP) · 다운로드 |
 | **Config** | `configs/*.yaml` 읽기 전용 뷰어 · 백엔드(API) URL 오버라이드 |
 
@@ -344,6 +371,8 @@ hidden_dim: 256
 | `GET` | `/api/artifacts` | 내보낸 파일 목록 |
 | `GET` | `/api/demos` | 수집된 데모 HDF5 목록 |
 | `GET` | `/api/config` | 전체 YAML 설정 조회 |
+
+> ODIN 비즈니스 레이어 엔드포인트(`/api/catalog`·`/api/policies`·`/api/experiments`·`/api/billing`·`/api/entitlements`)는 **[docs/ODIN-PLATFORM.md](docs/ODIN-PLATFORM.md)** 에 정리되어 있습니다.
 
 ---
 

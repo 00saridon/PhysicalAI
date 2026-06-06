@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { clsx } from 'clsx'
 import type { PipelineStatus } from '../../types/pipeline'
 import type { NavPage } from '../../App'
@@ -19,6 +20,9 @@ const NAV_ITEMS: NavItem[] = [
   ] },
   { label: 'Demos',     icon: '🗄' },
   { label: 'Simulation', icon: '🦾' },
+  { label: 'Datasets',  icon: '🛒' },
+  { label: 'Marketplace', icon: '🧠' },
+  { label: 'MLOps',     icon: '🧪' },
   { label: 'Artifacts', icon: '📦' },
   { label: 'Config',    icon: '⚙' },
 ]
@@ -34,6 +38,7 @@ interface Props {
 }
 
 export function Sidebar({ status, activePage, onNav, resource, onSelectResource, isOpen, onClose }: Props) {
+  const [logoOk, setLogoOk] = useState(true)
   return (
     <aside className={clsx(
       'w-56 flex-shrink-0 bg-panel border-r border-border flex flex-col z-30 transition-transform duration-300',
@@ -46,12 +51,21 @@ export function Sidebar({ status, activePage, onNav, resource, onSelectResource,
           className="flex items-center gap-2.5 cursor-pointer hover:opacity-80 transition-opacity"
           onClick={() => onNav('Overview')}
         >
-          <div className="w-8 h-8 rounded-lg bg-[#0a1400] border border-nvidia/40 flex items-center justify-center text-base shadow-md shadow-nvidia/10">
-            🤖
+          <div className="rounded-md bg-white px-1.5 py-1 flex items-center shadow-md shadow-black/30">
+            {logoOk ? (
+              <img
+                src="/odin-logo.png"
+                alt="ODIN"
+                className="h-6 w-auto object-contain"
+                onError={() => setLogoOk(false)}
+              />
+            ) : (
+              <span className="text-lg font-black leading-none tracking-tight" style={{ color: '#9B1B30' }}>ODIN</span>
+            )}
           </div>
           <div className="text-left">
             <p className="text-sm font-black text-slate-100 leading-tight">PhysicalAI</p>
-            <p className="text-[9px] font-bold text-nvidia/70 uppercase tracking-widest">Omniverse Pipeline</p>
+            <p className="text-[9px] font-bold text-nvidia/70 uppercase tracking-widest">an ODIN Project</p>
           </div>
         </button>
         <button

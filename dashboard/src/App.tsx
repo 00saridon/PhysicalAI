@@ -5,16 +5,22 @@ import { Overview } from './pages/Overview'
 import { Run } from './pages/Run'
 import { Training } from './pages/Training'
 import { Demos } from './pages/Demos'
+import { Datasets } from './pages/Datasets'
+import { Marketplace } from './pages/Marketplace'
+import { MLOps } from './pages/MLOps'
 import { Artifacts } from './pages/Artifacts'
+import { Admin } from './pages/Admin'
 import { Config } from './pages/Config'
 import { Resources, type ResourceKind } from './pages/Resources'
 import { consumeLanding, getApiOverride, setApiOverride, reloadWithLanding } from './api/base'
+import { AuthProvider } from './auth/AuthContext'
+import { PurchaseProvider } from './auth/PurchaseContext'
 
 // Lazy-load the 3D page so three.js is split into its own chunk (loaded on demand)
 const Simulation = lazy(() => import('./pages/Simulation').then(m => ({ default: m.Simulation })))
 import { usePipelineStatus, useRunStage, usePipelineMode, useSetMode } from './hooks/usePipeline'
 
-export type NavPage = 'Overview' | 'Run' | 'Training' | 'Resources' | 'Demos' | 'Simulation' | 'Artifacts' | 'Config'
+export type NavPage = 'Overview' | 'Run' | 'Training' | 'Resources' | 'Demos' | 'Simulation' | 'Datasets' | 'Marketplace' | 'MLOps' | 'Artifacts' | 'Admin' | 'Config'
 
 function PageContent({ page, onNav, resource, onSelectResource }: {
   page: NavPage
@@ -33,7 +39,11 @@ function PageContent({ page, onNav, resource, onSelectResource }: {
         <Simulation />
       </Suspense>
     )
+    case 'Datasets':   return <Datasets />
+    case 'Marketplace': return <Marketplace />
+    case 'MLOps':      return <MLOps />
     case 'Artifacts':  return <Artifacts />
+    case 'Admin':      return <Admin onExit={() => onNav('Overview')} />
     case 'Config':     return <Config />
   }
 }
@@ -84,6 +94,8 @@ export default function App() {
   }
 
   return (
+    <AuthProvider>
+    <PurchaseProvider>
     <div className="h-screen flex overflow-hidden bg-surface text-slate-200">
       {/* Mobile overlay */}
       {sidebarOpen && (
@@ -108,6 +120,7 @@ export default function App() {
           page={page}
           onMenuToggle={() => setSidebarOpen(o => !o)}
           onNavHome={() => handleNav('Overview')}
+          onNavAdmin={() => handleNav('Admin')}
           onNewRun={() => runStage({ stage: 'env', validate: true })}
           running={status?.running ?? false}
           mock={mode?.mock ?? true}
@@ -120,5 +133,7 @@ export default function App() {
         </div>
       </div>
     </div>
+    </PurchaseProvider>
+    </AuthProvider>
   )
 }

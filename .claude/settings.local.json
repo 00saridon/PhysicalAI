@@ -26,7 +26,20 @@
       "Bash(Select-Object Name)",
       "Skill(superpowers:finishing-a-development-branch)",
       "Skill(superpowers:finishing-a-development-branch:*)",
-      "PowerShell([System.IO.Directory]::GetDirectories\\(\"C:\\\\Users\\\\ASUS\\\\.claude\\\\projects\\\\\"\\))"
+      "PowerShell([System.IO.Directory]::GetDirectories\\(\"C:\\\\Users\\\\ASUS\\\\.claude\\\\projects\\\\\"\\))",
+      "mcp__playwright__browser_network_requests",
+      "Bash(MOCK_PIPELINE=true python -m uvicorn api.main:app --host 127.0.0.1 --port 8000)",
+      "Bash(git fetch *)",
+      "Bash(git rebase *)",
+      "Bash(git push *)",
+      "Bash(curl -s -m 20 -w '  [HTTP %{http_code}]\\\\n' __TRACKED_VAR__/api/__TRACKED_VAR__)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_click",
+      "Bash(python -c \"import zipfile; z=zipfile.ZipFile\\('PhysicalAI_비즈니스모델_분석.docx'\\); bad=z.testzip\\(\\); print\\('ZIP OK' if bad is None else 'BAD:'+bad\\); print\\('files:', len\\(z.namelist\\(\\)\\)\\); print\\('has document.xml:', 'word/document.xml' in z.namelist\\(\\)\\)\")",
+      "Bash(ls outputs *)",
+      "Bash(ls outputs/checkpoints)",
+      "Bash(ls train *)",
+      "Bash(ls training *)"
     ]
   }
 }

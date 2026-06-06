@@ -85,6 +85,53 @@ export function consumeLanding(): { page: string; resource?: string } | null {
   }
 }
 
+// Buyer's dataset license key (DaaS Phase 1). Persisted so paid downloads stay
+// unlocked across reloads. Phase 2 billing will set this after a successful
+// checkout instead of the user pasting it in.
+const LICENSE_KEY = 'physicalai.licenseKey'
+
+export function getLicenseKey(): string {
+  if (typeof window === 'undefined') return ''
+  try {
+    return localStorage.getItem(LICENSE_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+export function setLicenseKey(key: string): void {
+  try {
+    const trimmed = key.trim()
+    if (trimmed) localStorage.setItem(LICENSE_KEY, trimmed)
+    else localStorage.removeItem(LICENSE_KEY)
+  } catch {
+    /* ignore storage failures */
+  }
+}
+
+// Storefront customer auth token (login / sign-up). Persisted so the session
+// survives reloads. Distinct from the admin token and the dataset license key.
+const AUTH_TOKEN_KEY = 'physicalai.authToken'
+
+export function getAuthToken(): string {
+  if (typeof window === 'undefined') return ''
+  try {
+    return localStorage.getItem(AUTH_TOKEN_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+export function setAuthToken(token: string): void {
+  try {
+    const trimmed = token.trim()
+    if (trimmed) localStorage.setItem(AUTH_TOKEN_KEY, trimmed)
+    else localStorage.removeItem(AUTH_TOKEN_KEY)
+  } catch {
+    /* ignore storage failures */
+  }
+}
+
 /** The active override, or null when falling back to the build-time default. */
 export function getApiOverride(): string | null {
   if (typeof window === 'undefined') return null

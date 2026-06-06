@@ -6,6 +6,13 @@ from api.routes.pipeline import router as pipeline_router
 from api.routes.logs import router as logs_router
 from api.routes.artifacts import router as artifacts_router
 from api.routes.dataset import router as dataset_router
+from api.routes.catalog import router as catalog_router
+from api.routes.entitlements import router as entitlements_router
+from api.routes.billing import router as billing_router
+from api.routes.policies import router as policies_router
+from api.routes.mlops import router as mlops_router
+from api.routes.business import router as business_router
+from api.routes.auth import router as auth_router
 
 app = FastAPI(title="PhysicalAI Dashboard API")
 app.state.runner = SubprocessRunner()
@@ -36,6 +43,13 @@ app.include_router(pipeline_router)
 app.include_router(logs_router)
 app.include_router(artifacts_router)
 app.include_router(dataset_router)
+app.include_router(catalog_router)
+app.include_router(entitlements_router)
+app.include_router(billing_router)
+app.include_router(policies_router)
+app.include_router(mlops_router)
+app.include_router(business_router)
+app.include_router(auth_router)
 
 @app.get("/api/health")
 async def health():

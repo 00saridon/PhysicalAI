@@ -1,11 +1,13 @@
 import { clsx } from 'clsx'
 import type { NavPage } from '../../App'
 import { ModeToggle } from './ModeToggle'
+import { AuthMenu } from '../auth/AuthMenu'
 
 interface Props {
   page: NavPage
   onMenuToggle: () => void
   onNavHome: () => void
+  onNavAdmin: () => void
   onNewRun: () => void
   running: boolean
   mock: boolean
@@ -14,7 +16,7 @@ interface Props {
   modePending?: boolean
 }
 
-export function TopBar({ page, onMenuToggle, onNavHome, onNewRun, running, mock, realAvailable, onSetMode, modePending }: Props) {
+export function TopBar({ page, onMenuToggle, onNavHome, onNavAdmin, onNewRun, running, mock, realAvailable, onSetMode, modePending }: Props) {
   return (
     <header className="h-12 flex-shrink-0 bg-panel border-b border-border flex items-center px-4 gap-3">
       {/* 모바일 햄버거 버튼 */}
@@ -48,6 +50,25 @@ export function TopBar({ page, onMenuToggle, onNavHome, onNewRun, running, mock,
       >
         {running ? '⟳ Running...' : '▶ New Run'}
       </button>
+
+      <div className="w-px h-5 bg-border mx-0.5 hidden sm:block" />
+
+      {/* 관리자 진입점 — 회원정보 바로 옆(우측 상단) */}
+      <button
+        onClick={onNavAdmin}
+        title="관리자 대시보드"
+        className={clsx(
+          'text-xs font-semibold px-2.5 py-1.5 rounded-md transition-colors whitespace-nowrap flex items-center gap-1',
+          page === 'Admin'
+            ? 'bg-nvidia/10 text-nvidia border border-nvidia/30'
+            : 'text-slate-400 hover:bg-border hover:text-slate-200 border border-transparent'
+        )}
+      >
+        <span>🔐</span>
+        <span className="hidden sm:inline">Admin</span>
+      </button>
+
+      <AuthMenu />
     </header>
   )
 }

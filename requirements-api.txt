@@ -9,3 +9,6 @@ numpy>=1.24.0
 torch>=2.1.0
 stable-baselines3>=2.2.0
 gymnasium>=0.29.0
+# Optional: real payments (DaaS Phase 2). Without STRIPE_SECRET_KEY the billing
+# routes run in keyless mock mode and never import this.
+stripe>=8.0.0

@@ -1,6 +1,7 @@
 demos/
 checkpoints/
 outputs/
+.claude/scheduled_tasks.lock
 .superpowers/
 .playwright-mcp/
 __pycache__/
