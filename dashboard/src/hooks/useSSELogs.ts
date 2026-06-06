@@ -5,9 +5,18 @@ import { streamSSE } from '../api/sse'
 
 const MAX_LINES = 200
 
+/** Payload of a terminal pipeline event (a stage finishing, failing, or being
+ *  stopped). Lets a caller chain stages (run the next one) or abort a sequence. */
+export interface TerminalInfo {
+  event: 'done' | 'error'
+  stage: string | null
+  exit_code: number
+  stopped: boolean
+}
+
 export function useSSELogs(
   url: string,
-  onTerminal?: () => void,
+  onTerminal?: (info: TerminalInfo) => void,
 ): { lines: LogLine[]; connected: boolean } {
   const [lines, setLines] = useState<LogLine[]>([])
   const [connected, setConnected] = useState(false)
@@ -47,7 +56,12 @@ export function useSSELogs(
               })
             } catch {}
           } else if (e.event === 'done' || e.event === 'error') {
-            onTerminalRef.current?.()
+            let info: TerminalInfo = { event: e.event, stage: null, exit_code: 0, stopped: false }
+            try {
+              const d = JSON.parse(e.data) as Partial<TerminalInfo>
+              info = { event: e.event, stage: d.stage ?? null, exit_code: d.exit_code ?? 0, stopped: !!d.stopped }
+            } catch { /* keep defaults */ }
+            onTerminalRef.current?.(info)
           }
         },
         onClose: (reconnect) => {

@@ -8,7 +8,6 @@ interface Props {
   onMenuToggle: () => void
   onNavHome: () => void
   onNavAdmin: () => void
-  onNewRun: () => void
   running: boolean
   mock: boolean
   realAvailable: boolean
@@ -16,7 +15,7 @@ interface Props {
   modePending?: boolean
 }
 
-export function TopBar({ page, onMenuToggle, onNavHome, onNavAdmin, onNewRun, running, mock, realAvailable, onSetMode, modePending }: Props) {
+export function TopBar({ page, onMenuToggle, onNavHome, onNavAdmin, running, mock, realAvailable, onSetMode, modePending }: Props) {
   return (
     <header className="h-12 flex-shrink-0 bg-panel border-b border-border flex items-center px-4 gap-3">
       {/* 모바일 햄버거 버튼 */}
@@ -37,19 +36,6 @@ export function TopBar({ page, onMenuToggle, onNavHome, onNavAdmin, onNewRun, ru
       <div className="flex-1" />
 
       <ModeToggle mock={mock} onChange={onSetMode} disabled={running || modePending} pending={modePending} realAvailable={realAvailable} />
-
-      <button
-        onClick={onNewRun}
-        disabled={running}
-        className={clsx(
-          'text-xs font-semibold px-3 py-1.5 rounded-md transition-colors whitespace-nowrap',
-          running
-            ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-            : 'bg-indigo-600 hover:bg-indigo-500 text-white'
-        )}
-      >
-        {running ? '⟳ Running...' : '▶ New Run'}
-      </button>
 
       <div className="w-px h-5 bg-border mx-0.5 hidden sm:block" />
 

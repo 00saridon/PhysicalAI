@@ -18,7 +18,7 @@ import { PurchaseProvider } from './auth/PurchaseContext'
 
 // Lazy-load the 3D page so three.js is split into its own chunk (loaded on demand)
 const Simulation = lazy(() => import('./pages/Simulation').then(m => ({ default: m.Simulation })))
-import { usePipelineStatus, useRunStage, usePipelineMode, useSetMode } from './hooks/usePipeline'
+import { usePipelineStatus, usePipelineMode, useSetMode } from './hooks/usePipeline'
 
 export type NavPage = 'Overview' | 'Run' | 'Training' | 'Resources' | 'Demos' | 'Simulation' | 'Datasets' | 'Marketplace' | 'MLOps' | 'Artifacts' | 'Admin' | 'Config'
 
@@ -53,7 +53,6 @@ export default function App() {
   const [resource, setResource] = useState<ResourceKind>('gpu')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { data: status } = usePipelineStatus()
-  const { mutate: runStage } = useRunStage()
   const { data: mode } = usePipelineMode()
   const { mutate: setMode, isPending: modePending } = useSetMode()
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -121,7 +120,6 @@ export default function App() {
           onMenuToggle={() => setSidebarOpen(o => !o)}
           onNavHome={() => handleNav('Overview')}
           onNavAdmin={() => handleNav('Admin')}
-          onNewRun={() => runStage({ stage: 'env', validate: true })}
           running={status?.running ?? false}
           mock={mode?.mock ?? true}
           realAvailable={mode?.real_available ?? true}
