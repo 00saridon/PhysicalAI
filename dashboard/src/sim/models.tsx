@@ -40,6 +40,7 @@ export interface Motion {
   label: string
   dataset: string
   frames?: number                  // frames to request (default 240)
+  staticUrl?: string               // bundled fallback under dashboard/public (no backend)
 }
 
 export interface RobotModel {
@@ -1023,7 +1024,7 @@ export const MODELS: RobotModel[] = [
 
   { id: 'g1', name: 'Unitree G1', category: 'Humanoid', dof: 29, dataDriven: true, dataset: 'g1_dance',
     motions: [
-      { id: 'dance', label: '댄스', dataset: 'g1_dance', frames: 600 },
+      { id: 'dance', label: '댄스', dataset: 'g1_dance', frames: 600, staticUrl: 'motions/g1_dance.json' },
       { id: 'walk', label: '보행', dataset: 'g1_v1' },
     ],
     desc: 'Unitree G1 소형 휴머노이드(29-DOF). 댄스: 직접 안무한 29관절 + 루트 모션(g1_dance, 30fps) · 보행: Isaac Lab `G1_CFG` 궤적(g1_v1).',

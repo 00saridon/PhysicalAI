@@ -45,8 +45,16 @@ export function Simulation() {
 
   // load the selected model's trajectory (only for models that have a dataset)
   const { data: traj, isError } = useQuery({
-    queryKey: ['trajectory', dataset ?? null, frames],
-    queryFn: () => api.getTrajectory(dataset ?? 'synthetic_v1', frames),
+    queryKey: ['trajectory', dataset ?? null, frames, motion?.staticUrl ?? null],
+    queryFn: async () => {
+      try {
+        return await api.getTrajectory(dataset ?? 'synthetic_v1', frames)
+      } catch (err) {
+        // backend offline or missing this dataset → bundled motion, if any
+        if (motion?.staticUrl) return api.getStaticTrajectory(motion.staticUrl)
+        throw err
+      }
+    },
     enabled: !!dataset,
     refetchInterval: 10000,
     retry: false,
@@ -132,6 +140,12 @@ export function Simulation() {
             <span className={clsx('text-[9px] font-black px-2 py-1 rounded-full border',
               mode.mock ? 'border-emerald-600/40 text-emerald-400 bg-emerald-900/15' : 'border-amber-500/50 text-amber-300 bg-amber-900/15')}>
               {mode.mock ? 'MOCK 파이프라인' : 'REAL 파이프라인'}
+            </span>
+          )}
+          {traj?.source === 'static' && (
+            <span title="백엔드에 연결할 수 없어 대시보드에 포함된 모션 파일로 재생합니다"
+              className="text-[9px] font-black px-2 py-1 rounded-full border border-sky-500/40 text-sky-300 bg-sky-900/15">
+              내장 모션 · 오프라인
             </span>
           )}
           {status?.running && (

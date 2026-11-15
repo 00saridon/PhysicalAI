@@ -54,6 +54,18 @@ def test_feet_stay_flat_and_on_the_floor(dance):
     np.testing.assert_allclose(soles.min(axis=0), 0, atol=1e-4)   # one foot always planted
 
 
+def test_static_motion_file_in_sync(monkeypatch):
+    """dashboard/public/motions/g1_dance.json (offline fallback) must match the
+    generator — re-run scripts/export_static_motions.py after changing it."""
+    import json
+    monkeypatch.syspath_prepend(str(ROOT / "scripts"))
+    spec = importlib.util.spec_from_file_location("export_static_motions", ROOT / "scripts" / "export_static_motions.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    committed = json.loads((ROOT / "dashboard" / "public" / "motions" / "g1_dance.json").read_text(encoding="utf-8"))
+    assert committed == mod.g1_dance_payload()
+
+
 def test_loops_smoothly(dance):
     _, joints, root = dance
     step = np.abs(np.diff(joints, axis=0)).max()

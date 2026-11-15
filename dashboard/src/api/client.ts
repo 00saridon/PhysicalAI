@@ -328,6 +328,7 @@ export interface Trajectory {
   layout?: string | null      // joint layout id, e.g. 'g1_29dof'
   fps?: number | null         // playback rate of the returned (strided) frames
   root?: number[][] | null    // per-frame root pose [x, dy, z, yaw]
+  source?: 'api' | 'static'   // 'static' = bundled fallback file (no backend)
 }
 
 export interface AuthUser {
@@ -397,6 +398,13 @@ export const api = {
   getConfig: () => _fetch<ConfigMap>('/config'),
   getTrajectory: (name = 'synthetic_v1', frames = 240) =>
     _fetch<Trajectory>(`/dataset/trajectory?name=${encodeURIComponent(name)}&frames=${frames}`),
+  // Bundled motion file under dashboard/public (same shape as getTrajectory),
+  // used when the backend is unreachable or lacks the dataset.
+  getStaticTrajectory: async (path: string): Promise<Trajectory> => {
+    const res = await fetch(`${import.meta.env.BASE_URL}${path}`)
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}: static motion ${path}`)
+    return { ...(await res.json() as Trajectory), source: 'static' }
+  },
   getCatalog: () => _fetch<CatalogProduct[]>('/catalog'),
   getProduct: (id: string) => _fetch<CatalogProduct>(`/catalog/${encodeURIComponent(id)}`),
   // Parameterized synthetic generation (DaaS Phase 3) — order a randomized variant.
