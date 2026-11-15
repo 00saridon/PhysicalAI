@@ -9,7 +9,7 @@
  *       (datasets: joint_state[T, dof], optional action/reward/rgb).
  *    2) Set `dataset: '<name>'` and `dataDriven: true` on the model.
  *  The page then fetches that trajectory and passes `joints` each frame; the
- *  component maps `joints[i]` onto its DOFs (see makeQuadruped/makeHumanoid).
+ *  component maps `joints[i]` onto its DOFs (see useQuadrupedRig/makeHumanoid).
  *  Procedural models (no dataset) animate from a clock instead.
  *
  *  Unreal/Unity: the same joint_state[i] -> DOF mapping is the rig contract —
@@ -328,31 +328,85 @@ const AnymalModel: React.FC<ModelProps> = (props) => {
   )
 }
 
-/* ── Generic quadruped (Spot) ── */
-function makeQuadruped({ body, accent, eye = NV }: RigOpts): React.FC<ModelProps> {
-  return function Quadruped(props) {
-    const { hips, knees, root } = useQuadrupedRig(props)
-    const pos = QUAD_HIPS
-    return (
-      <group ref={root} position={[0, 0.46, 0]}>
-        <mesh castShadow receiveShadow><boxGeometry args={[0.66, 0.16, 0.3]} /><meshStandardMaterial {...mat(body, 0.6, 0.4)} /></mesh>
-        <mesh position={[0, 0.085, 0]} castShadow><boxGeometry args={[0.5, 0.03, 0.24]} /><meshStandardMaterial {...accentMat(accent)} /></mesh>
-        <mesh position={[0.37, 0.02, 0]} castShadow><boxGeometry args={[0.12, 0.1, 0.18]} /><meshStandardMaterial {...DARK} /></mesh>
-        {[0.06, -0.06].map(z => <mesh key={z} position={[0.43, 0.04, z]}><sphereGeometry args={[0.022, 12, 12]} /><meshStandardMaterial color={eye} emissive={eye} emissiveIntensity={0.8} /></mesh>)}
-        {pos.map((p, i) => (
+/* ── Spot: long, flat yellow-covered body over a black chassis, top payload
+ *  rails, black sensor nose with V-angled stereo camera pairs, side/rear
+ *  stereo cameras, yellow upper legs with black joints, shanks and feet. ── */
+const SP_YELLOW = { color: '#f2c318', metalness: 0.08, roughness: 0.4, clearcoat: 0.4, clearcoatRoughness: 0.35 }
+const SP_BLACK = { color: '#17191c', metalness: 0.25, roughness: 0.55 }
+const SP_GREY = { color: '#34383f', metalness: 0.3, roughness: 0.5 }
+
+function StereoPair({ position, rotation }: { position: [number, number, number]; rotation: [number, number, number] }) {
+  // Dark plate with two lenses, facing +x in its local frame.
+  return (
+    <group position={position} rotation={rotation}>
+      <RoundedBox args={[0.012, 0.04, 0.085]} radius={0.005} smoothness={2}><meshStandardMaterial {...SP_GREY} /></RoundedBox>
+      {[0.025, -0.025].map(z => (
+        <mesh key={z} position={[0.007, 0, z]} rotation={[0, 0, Math.PI / 2]}>
+          <cylinderGeometry args={[0.011, 0.011, 0.004, 18]} /><meshStandardMaterial {...AN_GLASS} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+const SpotModel: React.FC<ModelProps> = (props) => {
+  const { hips, knees, root } = useQuadrupedRig(props)
+  return (
+    <group ref={root} position={[0, 0.46, 0]}>
+      {/* black chassis + yellow top & side covers */}
+      <RoundedBox args={[0.74, 0.1, 0.2]} radius={0.03} smoothness={3} position={[0, -0.02, 0]} castShadow receiveShadow>
+        <meshStandardMaterial {...SP_BLACK} />
+      </RoundedBox>
+      <RoundedBox args={[0.6, 0.06, 0.25]} radius={0.025} smoothness={4} position={[0, 0.045, 0]} castShadow receiveShadow>
+        <meshPhysicalMaterial {...SP_YELLOW} />
+      </RoundedBox>
+      {[1, -1].map(s => (
+        <RoundedBox key={s} args={[0.46, 0.07, 0.02]} radius={0.008} smoothness={3} position={[0, -0.005, s * 0.11]} castShadow>
+          <meshPhysicalMaterial {...SP_YELLOW} />
+        </RoundedBox>
+      ))}
+      {/* payload rails */}
+      {[0.065, -0.065].map(z => (
+        <mesh key={z} position={[0, 0.082, z]} castShadow><boxGeometry args={[0.5, 0.014, 0.022]} /><meshStandardMaterial {...SP_BLACK} /></mesh>
+      ))}
+      {/* front sensor nose with V-angled stereo pairs */}
+      <RoundedBox args={[0.1, 0.1, 0.22]} radius={0.03} smoothness={3} position={[0.37, 0.005, 0]} castShadow>
+        <meshStandardMaterial {...SP_BLACK} />
+      </RoundedBox>
+      {[1, -1].map(s => (
+        <StereoPair key={s} position={[0.415, 0.01, s * 0.055]} rotation={[0, s * -0.45, -0.2]} />
+      ))}
+      {/* side and rear stereo pairs */}
+      {[1, -1].map(s => (
+        <StereoPair key={`side${s}`} position={[0, -0.03, s * 0.102]} rotation={[0, s * -Math.PI / 2, 0]} />
+      ))}
+      <RoundedBox args={[0.06, 0.09, 0.19]} radius={0.02} smoothness={3} position={[-0.375, -0.005, 0]} castShadow>
+        <meshStandardMaterial {...SP_BLACK} />
+      </RoundedBox>
+      <StereoPair position={[-0.408, 0, 0]} rotation={[0, Math.PI, 0]} />
+      {/* legs: black hip drive, yellow upper leg, black knee, shank and foot */}
+      {QUAD_HIPS.map((p, i) => {
+        const s = Math.sign(p[2])
+        return (
           <group key={i} position={p}>
-            <group ref={el => (hips.current[i] = el)}>
-              <mesh position={[0, -0.13, 0]} castShadow><cylinderGeometry args={[0.035, 0.035, 0.26, 12]} /><meshStandardMaterial {...mat(body, 0.6, 0.4)} /></mesh>
+            <mesh rotation={[0, 0, Math.PI / 2]} castShadow><cylinderGeometry args={[0.048, 0.048, 0.1, 28]} /><meshStandardMaterial {...SP_BLACK} /></mesh>
+            <group ref={el => (hips.current[i] = el)} position={[0, 0, s * 0.06]}>
+              <mesh rotation={[Math.PI / 2, 0, 0]} castShadow><cylinderGeometry args={[0.052, 0.052, 0.07, 28]} /><meshStandardMaterial {...SP_BLACK} /></mesh>
+              <RoundedBox args={[0.075, 0.25, 0.06]} radius={0.025} smoothness={4} position={[0, -0.125, 0]} castShadow>
+                <meshPhysicalMaterial {...SP_YELLOW} />
+              </RoundedBox>
+              <mesh position={[0, -0.13, s * 0.031]}><boxGeometry args={[0.03, 0.15, 0.004]} /><meshStandardMaterial {...SP_BLACK} /></mesh>
               <group ref={el => (knees.current[i] = el)} position={[0, -0.26, 0]}>
-                <mesh position={[0, -0.13, 0]} castShadow><cylinderGeometry args={[0.028, 0.022, 0.26, 12]} /><meshStandardMaterial {...DARK} /></mesh>
-                <mesh position={[0, -0.27, 0]} castShadow><sphereGeometry args={[0.035, 14, 14]} /><meshStandardMaterial color="#0c1018" metalness={0.6} roughness={0.6} /></mesh>
+                <mesh rotation={[Math.PI / 2, 0, 0]} castShadow><cylinderGeometry args={[0.036, 0.036, 0.06, 24]} /><meshStandardMaterial {...SP_GREY} /></mesh>
+                <mesh position={[0, -0.13, 0]} castShadow><cylinderGeometry args={[0.024, 0.016, 0.26, 16]} /><meshStandardMaterial {...SP_BLACK} /></mesh>
+                <mesh position={[0, -0.27, 0]} castShadow><sphereGeometry args={[0.032, 18, 18]} /><meshStandardMaterial color="#1a1c20" roughness={0.9} /></mesh>
               </group>
             </group>
           </group>
-        ))}
-      </group>
-    )
-  }
+        )
+      })}
+    </group>
+  )
 }
 
 /* ── Humanoid biped factory (H1 / G1 style) ── */
@@ -447,7 +501,7 @@ export const MODELS: RobotModel[] = [
 
   { id: 'spot', name: 'Boston Dynamics Spot', category: 'Quadruped', dof: 12, dataDriven: true, dataset: 'spot_v1',
     desc: 'Boston Dynamics Spot. Isaac Lab `SPOT_CFG`. 궤적(joint_state[12])으로 대각 트로트 보행.',
-    target: [0, 0.4, 0], camera: [1.7, 1.1, 2.0], Component: makeQuadruped({ body: '#caa915', accent: '#1c1c1c', eye: '#ffcc33' }) },
+    target: [0, 0.42, 0], camera: [1.45, 0.95, 1.7], Component: SpotModel },
 
   { id: 'h1', name: 'Unitree H1', category: 'Humanoid', dof: 19, dataDriven: true, dataset: 'h1_v1',
     desc: 'Unitree H1 이족 휴머노이드. Isaac Lab `H1_CFG`. 궤적(joint_state[19])으로 보행 구동.',
