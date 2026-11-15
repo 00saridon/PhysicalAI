@@ -42,8 +42,15 @@ async def dataset_trajectory(name: str = "synthetic_v1", frames: int = 240):
         actions = np.asarray(f["action"][::stride][:frames], dtype=float) if "action" in f else np.zeros((len(joints), 0))
         rewards = np.asarray(f["reward"][::stride][:frames], dtype=float).reshape(-1) if "reward" in f else np.zeros(len(joints))
         has_rgb = "rgb" in f
+        # optional motion metadata: joint layout id, capture fps, root pose[x, dy, z, yaw]
+        layout = f.attrs.get("layout")
+        fps = f.attrs.get("fps")
+        root = np.asarray(f["root"][::stride][:frames], dtype=float) if "root" in f else None
 
     return {
+        "layout": str(layout) if layout is not None else None,
+        "fps": float(fps) / stride if fps is not None else None,   # playback rate of the strided frames
+        "root": root.tolist() if root is not None else None,
         "name": name,
         "n_total": n,
         "stride": stride,

@@ -7,7 +7,9 @@ EXPORT-produced synthetic_v1.hdf5 is never overwritten.
 
 Joint layouts are generated to match each rig's joints[i] -> DOF mapping in
 dashboard/src/sim/models.tsx (hips 0..3 / knees 4..7 for quadrupeds; legL/legR/
-armL/armR = 0..3 for humanoids).
+armL/armR = 0..3 for humanoids). g1_dance uses the full 29-DOF `g1_29dof`
+layout plus a `root` pose dataset and `layout`/`fps`/`joint_names` attributes
+(see scripts/g1_dance.py).
 """
 import os
 
@@ -21,7 +23,9 @@ rng = np.random.default_rng(0)
 t = np.arange(N) * 0.05
 
 
-def write(name, joints, actions=None, rewards=None, rgb=None):
+def write(name, joints, actions=None, rewards=None, rgb=None, extra=None, attrs=None):
+    """extra: additional datasets (e.g. root pose); attrs: file attributes
+    (e.g. layout / fps / joint_names) the trajectory API passes through."""
     path = os.path.join(DIR, f"{name}.hdf5")
     if os.path.exists(path):
         print(f"[seed] skip {name} (exists)")
@@ -29,13 +33,18 @@ def write(name, joints, actions=None, rewards=None, rgb=None):
     if actions is None:
         actions = np.clip(joints * 0.5 + rng.normal(0, 0.03, joints.shape), -1, 1)
     if rewards is None:
-        rewards = (np.sin(t) * 0.2 + rng.normal(0, 0.05, len(joints)))
+        tt = np.arange(len(joints)) * 0.05
+        rewards = (np.sin(tt) * 0.2 + rng.normal(0, 0.05, len(joints)))
     with h5py.File(path, "w") as f:
         f.create_dataset("joint_state", data=joints.astype(np.float32))
         f.create_dataset("action", data=actions.astype(np.float32))
         f.create_dataset("reward", data=rewards.astype(np.float32))
         if rgb is not None:
             f.create_dataset("rgb", data=rgb.astype(np.uint8))
+        for key, arr in (extra or {}).items():
+            f.create_dataset(key, data=np.asarray(arr, np.float32))
+        for key, val in (attrs or {}).items():
+            f.attrs[key] = val
     print(f"[seed] wrote {name}: joints{joints.shape}" + (f" rgb{rgb.shape}" if rgb is not None else ""))
 
 
@@ -94,4 +103,11 @@ write("spot_v1", gen_quadruped())
 write("g1_v1", gen_humanoid(23))
 write("h1_v1", gen_humanoid(19))
 write("crazyflie_v1", gen_quadcopter())
+
+# G1 dance: hand-authored 29-DOF choreography (see scripts/g1_dance.py)
+from g1_dance import FPS as DANCE_FPS, G1_JOINTS, generate as gen_g1_dance  # noqa: E402
+
+dance_joints, dance_root = gen_g1_dance()
+write("g1_dance", dance_joints, actions=dance_joints, extra={"root": dance_root},
+      attrs={"layout": "g1_29dof", "fps": DANCE_FPS, "joint_names": G1_JOINTS})
 print("[seed] done")

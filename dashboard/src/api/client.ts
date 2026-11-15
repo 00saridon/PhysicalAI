@@ -325,6 +325,9 @@ export interface Trajectory {
   joints: number[][]
   actions: number[][]
   rewards: number[]
+  layout?: string | null      // joint layout id, e.g. 'g1_29dof'
+  fps?: number | null         // playback rate of the returned (strided) frames
+  root?: number[][] | null    // per-frame root pose [x, dy, z, yaw]
 }
 
 export interface AuthUser {

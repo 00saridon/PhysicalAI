@@ -37,11 +37,17 @@ export function Simulation() {
   const model = MODELS.find(m => m.id === modelId) ?? MODELS[0]
   const Model = model.Component
 
+  // selectable motion (e.g. G1 dance / walk); falls back to the model's dataset
+  const [motionId, setMotionId] = useState<string | null>(null)
+  const motion = model.motions?.find(m => m.id === motionId) ?? model.motions?.[0]
+  const dataset = motion?.dataset ?? model.dataset
+  const frames = motion?.frames ?? 240
+
   // load the selected model's trajectory (only for models that have a dataset)
   const { data: traj, isError } = useQuery({
-    queryKey: ['trajectory', model.dataset ?? null],
-    queryFn: () => api.getTrajectory(model.dataset ?? 'synthetic_v1', 240),
-    enabled: !!model.dataset,
+    queryKey: ['trajectory', dataset ?? null, frames],
+    queryFn: () => api.getTrajectory(dataset ?? 'synthetic_v1', frames),
+    enabled: !!dataset,
     refetchInterval: 10000,
     retry: false,
   })
@@ -74,15 +80,16 @@ export function Simulation() {
     if (!playing || count === 0) return
     let raf = 0
     const step = (t: number) => {
-      const fps = 24 * speed
+      const fps = (traj?.fps ?? 24) * speed   // dataset rate when known (e.g. 30fps dance)
       if (t - lastRef.current >= 1000 / fps) { setFrame(f => (f + 1) % count); lastRef.current = t }
       raf = requestAnimationFrame(step)
     }
     raf = requestAnimationFrame(step)
     return () => cancelAnimationFrame(raf)
-  }, [playing, speed, count])
+  }, [playing, speed, count, traj?.fps])
 
   const joints = traj?.joints[frame] ?? new Array(7).fill(0)
+  const rootPose = traj?.root?.[frame] ?? null
   const phase = count ? frame / count : 0
 
   const apiBase = getApiBase()
@@ -146,6 +153,17 @@ export function Simulation() {
               RGB 비교 뷰
             </button>
           )}
+          {model.motions && model.motions.length > 1 && (
+            <div role="group" aria-label="모션 선택" className="flex rounded-full border border-border overflow-hidden">
+              {model.motions.map(m => (
+                <button key={m.id} onClick={() => { setMotionId(m.id); setFrame(0) }} aria-pressed={m.id === motion?.id}
+                  className={clsx('px-2.5 py-1 font-bold transition-colors',
+                    m.id === motion?.id ? 'bg-nvidia/15 text-nvidia' : 'text-slate-500 hover:text-slate-300')}>
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          )}
           <span className="hidden sm:inline px-2 py-1 rounded-full border border-border text-slate-400 font-bold">{model.category} · {model.dof} DOF</span>
         </div>
       </div>
@@ -153,7 +171,7 @@ export function Simulation() {
       {/* model library selector (add models in src/sim/models.tsx) */}
       <div className="flex flex-wrap gap-2">
         {MODELS.map(m => (
-          <button key={m.id} onClick={() => { setModelId(m.id); simSelection.id = m.id; setCompare(false) }}
+          <button key={m.id} onClick={() => { setModelId(m.id); simSelection.id = m.id; setCompare(false); setMotionId(null); setFrame(0) }}
             className={clsx('flex items-center gap-2.5 pl-2.5 pr-3 py-1.5 rounded-lg border text-left transition-all',
               m.id === modelId ? 'border-nvidia/50 bg-nvidia/10 shadow-sm shadow-nvidia/10' : 'border-border bg-panel hover:border-slate-600')}>
             <span className="text-lg leading-none">{MODEL_ICON[m.id] ?? '🤖'}</span>
@@ -193,7 +211,8 @@ export function Simulation() {
                 <Lightformer intensity={0.7} position={[5, 1, 3]} scale={[4, 4, 1]} color="#76b900" />
               </Environment>
 
-              <Model joints={joints} phase={phase} playing={playing} speed={speed} dataDriven={effDataDriven} showLabels={showLabels} eeRef={eeRef} />
+              <Model joints={joints} phase={phase} playing={playing} speed={speed} dataDriven={effDataDriven} showLabels={showLabels} eeRef={eeRef}
+                layout={traj?.layout} root={rootPose} />
               {showTelemetry && model.ee && <EETracker targetRef={eeRef} onPos={setEePos} />}
 
               <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
@@ -234,7 +253,7 @@ export function Simulation() {
                 <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
                 <span className="text-[9px] font-bold text-cyan-300/80 uppercase tracking-widest">RGB Observation · 224×224</span>
               </div>
-              <img src={`${apiBase}/dataset/frame?idx=${rgbIdx}&v=${dataVersion}&name=${model.dataset ?? 'synthetic_v1'}`} alt="synthetic RGB observation"
+              <img src={`${apiBase}/dataset/frame?idx=${rgbIdx}&v=${dataVersion}&name=${dataset ?? 'synthetic_v1'}`} alt="synthetic RGB observation"
                 className="w-full h-full object-contain" style={{ imageRendering: 'pixelated' }} />
             </div>
           )}
@@ -261,7 +280,7 @@ export function Simulation() {
                 <span className="text-[8px] font-mono text-slate-500">sensor cam</span>
               </div>
               <div className="rounded-lg overflow-hidden border border-nvidia/20 bg-black aspect-square">
-                <img src={`${apiBase}/dataset/frame?idx=${rgbIdx}&v=${dataVersion}&name=${model.dataset ?? 'synthetic_v1'}`} alt="synthetic RGB observation"
+                <img src={`${apiBase}/dataset/frame?idx=${rgbIdx}&v=${dataVersion}&name=${dataset ?? 'synthetic_v1'}`} alt="synthetic RGB observation"
                   className="w-full h-full object-cover" style={{ imageRendering: 'pixelated' }} />
               </div>
             </div>

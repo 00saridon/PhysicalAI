@@ -9,13 +9,13 @@
  *       (datasets: joint_state[T, dof], optional action/reward/rgb).
  *    2) Set `dataset: '<name>'` and `dataDriven: true` on the model.
  *  The page then fetches that trajectory and passes `joints` each frame; the
- *  component maps `joints[i]` onto its DOFs (see useQuadrupedRig/useHumanoidRig).
+ *  component maps `joints[i]` onto its DOFs (see useQuadrupedRig/useHumanoidRig/useG1Rig).
  *  Procedural models (no dataset) animate from a clock instead.
  *
  *  Unreal/Unity: the same joint_state[i] -> DOF mapping is the rig contract —
  *  bind each joint index to the engine's bone/joint and stream the array.
  * ─────────────────────────────────────────────────────────────────────── */
-import { useMemo, useRef } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Trail, Html, RoundedBox } from '@react-three/drei'
 import * as THREE from 'three'
@@ -31,6 +31,15 @@ export interface ModelProps {
   dataDriven?: boolean
   showLabels?: boolean
   eeRef?: React.RefObject<THREE.Mesh>
+  layout?: string | null           // joint layout of the trajectory, e.g. 'g1_29dof'
+  root?: number[] | null           // root pose of this frame [x, dy, z, yaw]
+}
+
+export interface Motion {
+  id: string
+  label: string
+  dataset: string
+  frames?: number                  // frames to request (default 240)
 }
 
 export interface RobotModel {
@@ -41,6 +50,7 @@ export interface RobotModel {
   desc: string
   dataDriven: boolean
   dataset?: string                 // outputs/dataset/<dataset>.hdf5
+  motions?: Motion[]               // selectable trajectories (first = default)
   ee?: boolean                     // has an end-effector (show EE readout/trail)
   target: [number, number, number]
   camera: [number, number, number]
@@ -401,7 +411,7 @@ const SpotModel: React.FC<ModelProps> = (props) => {
   )
 }
 
-/* ── Humanoid rig (shared by H1 / G1) ──
+/* ── Humanoid rig (H1; G1 uses the 29-DOF useG1Rig) ──
  *  joint_state contract: joints[0..1] = left/right hip pitch,
  *  joints[2..3] = left/right shoulder pitch (rotation about x).
  *  Without data, a walking gait is generated. */
@@ -719,84 +729,162 @@ function G1Foot() {
   )
 }
 
-function G1Arm({ side }: { side: 1 | -1 }) {
+/* G1 rig: 29 joints in Unitree order (legs 6+6, waist 3, arms 7+7). Each
+ * joint is its own <group>; the axis comes from the joint name (see
+ * scripts/g1_dance.py for the shared sign convention). */
+const G1_JOINTS = [
+  'l_hip_pitch', 'l_hip_roll', 'l_hip_yaw', 'l_knee', 'l_ankle_pitch', 'l_ankle_roll',
+  'r_hip_pitch', 'r_hip_roll', 'r_hip_yaw', 'r_knee', 'r_ankle_pitch', 'r_ankle_roll',
+  'waist_yaw', 'waist_roll', 'waist_pitch',
+  'l_shoulder_pitch', 'l_shoulder_roll', 'l_shoulder_yaw', 'l_elbow', 'l_wrist_roll', 'l_wrist_pitch', 'l_wrist_yaw',
+  'r_shoulder_pitch', 'r_shoulder_roll', 'r_shoulder_yaw', 'r_elbow', 'r_wrist_roll', 'r_wrist_pitch', 'r_wrist_yaw',
+]
+const g1Axis = (n: string): 'x' | 'y' | 'z' =>
+  n.endsWith('wrist_roll') ? 'y' : n.endsWith('wrist_yaw') ? 'z'
+    : /(pitch|knee|elbow)$/.test(n) ? 'x' : n.endsWith('roll') ? 'z' : 'y'
+const G1_PELVIS_Y = 0.92
+
+type Reg = (name: string) => (el: THREE.Group | null) => void
+
+/* Drives the G1 rig from either
+ *  - a 'g1_29dof' trajectory: all 29 joints + root pose (dance), or
+ *  - the legacy humanoid contract: joints[0..1] hip pitch, [2..3] shoulder
+ *    pitch (g1_v1 walk), or
+ *  - a procedural walk when there is no data. */
+function useG1Rig({ joints, root: rootPose, layout, playing, speed, dataDriven }: ModelProps) {
+  const groups = useRef<Record<string, THREE.Group | null>>({})
+  const root = useRef<THREE.Group>(null!)
+  const t = useRef(0)
+  const latest = useRef({ joints, rootPose, layout })
+  latest.current = { joints, rootPose, layout }
+  const reg: Reg = useCallback((name) => (el) => { groups.current[name] = el }, [])
+  useFrame((_, dt) => {
+    const set = (n: string, v: number) => { const o = groups.current[n]; if (o) o.rotation[g1Axis(n)] = v }
+    const { joints: j, rootPose: rp, layout: lay } = latest.current
+    if (dataDriven && lay === 'g1_29dof' && j.length >= G1_JOINTS.length) {
+      G1_JOINTS.forEach((n, i) => set(n, j[i] ?? 0))
+      const r = rp ?? [0, 0, 0, 0]
+      if (root.current) { root.current.position.set(r[0] ?? 0, G1_PELVIS_Y + (r[1] ?? 0), r[2] ?? 0); root.current.rotation.y = r[3] ?? 0 }
+      return
+    }
+    G1_JOINTS.forEach(n => set(n, 0))
+    if (root.current) { root.current.position.set(0, G1_PELVIS_Y, 0); root.current.rotation.y = 0 }
+    if (dataDriven) {
+      set('l_hip_pitch', j[0] ?? 0); set('r_hip_pitch', j[1] ?? 0)
+      set('l_shoulder_pitch', j[2] ?? 0); set('r_shoulder_pitch', j[3] ?? 0)
+    } else {
+      if (playing) t.current += dt * speed * 3.2
+      const tt = t.current
+      set('l_hip_pitch', Math.sin(tt) * 0.5); set('r_hip_pitch', Math.sin(tt + Math.PI) * 0.5)
+      set('l_shoulder_pitch', Math.sin(tt + Math.PI) * 0.45); set('r_shoulder_pitch', Math.sin(tt) * 0.45)
+      if (root.current) root.current.position.y = G1_PELVIS_Y + Math.abs(Math.sin(tt)) * 0.03
+    }
+  })
+  return { reg, root }
+}
+
+function G1Arm({ side, reg }: { side: 1 | -1; reg: Reg }) {
+  const s = side === 1 ? 'l' : 'r'
   return (
-    <group>
+    <group ref={reg(`${s}_shoulder_pitch`)}>
       <mesh castShadow><sphereGeometry args={[0.056, 24, 18]} /><meshStandardMaterial {...G1_SILVER} /></mesh>
       <group position={[-side * 0.03, 0, 0]}><Drive r={0.045} len={0.03} /></group>
-      <LimbShell profile={P_UPPER_ARM} scale={[1, 1, 1.08]} />
-      <Band r={0.045} y={-0.075} h={0.012} />
-      <Band r={0.038} y={-0.29} h={0.022} />
-      <group position={[0, -0.34, 0]}>
-        <Drive r={0.04} len={0.08} />
-        <LimbShell profile={P_FOREARM} scale={[0.92, 1, 1.05]} position={[0, 0, 0.006]} />
-        <Band r={0.028} y={-0.232} h={0.026} />
-        <group position={[0, -0.25, 0.008]}><G1Hand side={side} /></group>
+      <group ref={reg(`${s}_shoulder_roll`)}>
+        <group ref={reg(`${s}_shoulder_yaw`)}>
+          <LimbShell profile={P_UPPER_ARM} scale={[1, 1, 1.08]} />
+          <Band r={0.045} y={-0.075} h={0.012} />
+          <Band r={0.038} y={-0.29} h={0.022} />
+          <group position={[0, -0.34, 0]} ref={reg(`${s}_elbow`)}>
+            <Drive r={0.04} len={0.08} />
+            <LimbShell profile={P_FOREARM} scale={[0.92, 1, 1.05]} position={[0, 0, 0.006]} />
+            <Band r={0.028} y={-0.232} h={0.026} />
+            <group position={[0, -0.25, 0.008]} ref={reg(`${s}_wrist_roll`)}>
+              <group ref={reg(`${s}_wrist_pitch`)}>
+                <group ref={reg(`${s}_wrist_yaw`)}><G1Hand side={side} /></group>
+              </group>
+            </group>
+          </group>
+        </group>
       </group>
     </group>
   )
 }
 
-function G1Leg() {
+function G1Leg({ side, reg }: { side: 1 | -1; reg: Reg }) {
+  const s = side === 1 ? 'l' : 'r'
   return (
-    <group>
+    <group ref={reg(`${s}_hip_pitch`)}>
       <Drive r={0.07} len={0.1} />
-      <LimbShell profile={P_THIGH} scale={[0.88, 1, 1.08]} position={[0, -0.01, 0.006]} />
-      <group position={[0, -0.4, 0]}>
-        <Drive r={0.052} len={0.09} />
-        {/* knee cap */}
-        <mesh position={[0, 0.005, 0.042]} scale={[1, 1.2, 0.6]} castShadow><sphereGeometry args={[0.034, 20, 16]} /><meshStandardMaterial {...G1_SILVER} /></mesh>
-        {/* shin with posterior calf swell */}
-        <LimbShell profile={P_SHIN} scale={[0.86, 1, 1.0]} position={[0, 0, 0.006]} />
-        <LimbShell profile={P_SHIN} scale={[0.7, 0.75, 0.75]} position={[0, -0.02, -0.018]} />
-        {/* calf drive and ankle push-rods */}
-        <RoundedBox args={[0.05, 0.07, 0.03]} radius={0.01} smoothness={3} position={[0, -0.08, -0.05]} castShadow>
-          <meshStandardMaterial {...G1_BLACK} />
-        </RoundedBox>
-        {[0.018, -0.018].map(x => (
-          <mesh key={x} position={[x, -0.29, -0.036]} castShadow><cylinderGeometry args={[0.005, 0.005, 0.16, 10]} /><meshStandardMaterial {...G1_PANEL} /></mesh>
-        ))}
-        <group position={[0, -0.39, 0]}><Drive r={0.03} len={0.07} /></group>
-        <group position={[0, -0.445, 0]}><G1Foot /></group>
+      <group ref={reg(`${s}_hip_roll`)}>
+        <group ref={reg(`${s}_hip_yaw`)}>
+          <LimbShell profile={P_THIGH} scale={[0.88, 1, 1.08]} position={[0, -0.01, 0.006]} />
+          <group position={[0, -0.4, 0]} ref={reg(`${s}_knee`)}>
+            <Drive r={0.052} len={0.09} />
+            {/* knee cap */}
+            <mesh position={[0, 0.005, 0.042]} scale={[1, 1.2, 0.6]} castShadow><sphereGeometry args={[0.034, 20, 16]} /><meshStandardMaterial {...G1_SILVER} /></mesh>
+            {/* shin with posterior calf swell */}
+            <LimbShell profile={P_SHIN} scale={[0.86, 1, 1.0]} position={[0, 0, 0.006]} />
+            <LimbShell profile={P_SHIN} scale={[0.7, 0.75, 0.75]} position={[0, -0.02, -0.018]} />
+            {/* calf drive and ankle push-rods */}
+            <RoundedBox args={[0.05, 0.07, 0.03]} radius={0.01} smoothness={3} position={[0, -0.08, -0.05]} castShadow>
+              <meshStandardMaterial {...G1_BLACK} />
+            </RoundedBox>
+            {[0.018, -0.018].map(x => (
+              <mesh key={x} position={[x, -0.29, -0.036]} castShadow><cylinderGeometry args={[0.005, 0.005, 0.16, 10]} /><meshStandardMaterial {...G1_PANEL} /></mesh>
+            ))}
+            <group position={[0, -0.39, 0]} ref={reg(`${s}_ankle_pitch`)}>
+              <Drive r={0.03} len={0.07} />
+              <group ref={reg(`${s}_ankle_roll`)}>
+                <group position={[0, -0.055, 0]}><G1Foot /></group>
+              </group>
+            </group>
+          </group>
+        </group>
       </group>
     </group>
   )
 }
 
 const G1Model: React.FC<ModelProps> = (props) => {
-  const { legL, legR, armL, armR, root } = useHumanoidRig(props)
+  const { reg, root } = useG1Rig(props)
   return (
-    <group ref={root} position={[0, 0.92, 0]}>
+    <group ref={root} position={[0, G1_PELVIS_Y, 0]}>
       {/* pelvis + waist joint */}
       <RoundedBox args={[0.2, 0.1, 0.13]} radius={0.035} smoothness={3} castShadow><meshStandardMaterial {...G1_SILVER} /></RoundedBox>
       <mesh position={[0, 0.07, 0]} castShadow><cylinderGeometry args={[0.06, 0.07, 0.05, 28]} /><meshStandardMaterial {...G1_BLACK} /></mesh>
-      <mesh position={[0, 0.1, 0]}><cylinderGeometry args={[0.075, 0.075, 0.012, 28]} /><meshStandardMaterial {...G1_PANEL} /></mesh>
-      {/* boxy rounded torso, dark lower panel, chest notch */}
-      <RoundedBox args={[0.28, 0.31, 0.17]} radius={0.05} smoothness={5} position={[0, 0.27, 0]} castShadow receiveShadow>
-        <meshStandardMaterial {...G1_SILVER} />
-      </RoundedBox>
-      <RoundedBox args={[0.2, 0.075, 0.02]} radius={0.008} smoothness={3} position={[0, 0.17, 0.08]} castShadow>
-        <meshStandardMaterial {...G1_PANEL} />
-      </RoundedBox>
-      <mesh position={[0, 0.39, 0.086]} rotation={[Math.PI / 2, 0, Math.PI]}><coneGeometry args={[0.012, 0.004, 3]} /><meshStandardMaterial {...G1_BLACK} /></mesh>
-      {/* black shoulder yoke + neck */}
-      <RoundedBox args={[0.14, 0.03, 0.1]} radius={0.012} smoothness={3} position={[0, 0.425, 0]} castShadow>
-        <meshStandardMaterial {...G1_BLACK} />
-      </RoundedBox>
-      <mesh position={[0, 0.465, 0]} castShadow><cylinderGeometry args={[0.025, 0.03, 0.05, 20]} /><meshStandardMaterial {...G1_BLACK} /></mesh>
-      {/* helmet head with blue LED visor ring */}
-      <group position={[0, 0.55, 0]}>
-        <mesh scale={[0.85, 1.05, 0.95]} castShadow><sphereGeometry args={[0.075, 32, 24]} /><meshStandardMaterial {...G1_BLACK} /></mesh>
-        <group position={[0, -0.005, 0.058]} scale={[1, 0.8, 1]}>
-          <mesh><torusGeometry args={[0.045, 0.006, 10, 40]} /><meshStandardMaterial color={G1_VISOR} emissive={G1_VISOR} emissiveIntensity={1.6} toneMapped={false} /></mesh>
-          <mesh position={[0, 0, -0.004]}><circleGeometry args={[0.043, 32]} /><meshStandardMaterial color="#05070b" metalness={0.9} roughness={0.1} /></mesh>
+      {/* waist yaw > roll > pitch carries the whole upper body */}
+      <group position={[0, 0.07, 0]} ref={reg('waist_yaw')}>
+        <group ref={reg('waist_roll')}>
+          <group ref={reg('waist_pitch')}>
+            <mesh position={[0, 0.03, 0]}><cylinderGeometry args={[0.075, 0.075, 0.012, 28]} /><meshStandardMaterial {...G1_PANEL} /></mesh>
+            {/* boxy rounded torso, dark lower panel, chest notch */}
+            <RoundedBox args={[0.28, 0.31, 0.17]} radius={0.05} smoothness={5} position={[0, 0.2, 0]} castShadow receiveShadow>
+              <meshStandardMaterial {...G1_SILVER} />
+            </RoundedBox>
+            <RoundedBox args={[0.2, 0.075, 0.02]} radius={0.008} smoothness={3} position={[0, 0.1, 0.08]} castShadow>
+              <meshStandardMaterial {...G1_PANEL} />
+            </RoundedBox>
+            <mesh position={[0, 0.32, 0.086]} rotation={[Math.PI / 2, 0, Math.PI]}><coneGeometry args={[0.012, 0.004, 3]} /><meshStandardMaterial {...G1_BLACK} /></mesh>
+            {/* black shoulder yoke + neck */}
+            <RoundedBox args={[0.14, 0.03, 0.1]} radius={0.012} smoothness={3} position={[0, 0.355, 0]} castShadow>
+              <meshStandardMaterial {...G1_BLACK} />
+            </RoundedBox>
+            <mesh position={[0, 0.395, 0]} castShadow><cylinderGeometry args={[0.025, 0.03, 0.05, 20]} /><meshStandardMaterial {...G1_BLACK} /></mesh>
+            {/* helmet head with blue LED visor ring */}
+            <group position={[0, 0.48, 0]}>
+              <mesh scale={[0.85, 1.05, 0.95]} castShadow><sphereGeometry args={[0.075, 32, 24]} /><meshStandardMaterial {...G1_BLACK} /></mesh>
+              <group position={[0, -0.005, 0.058]} scale={[1, 0.8, 1]}>
+                <mesh><torusGeometry args={[0.045, 0.006, 10, 40]} /><meshStandardMaterial color={G1_VISOR} emissive={G1_VISOR} emissiveIntensity={1.6} toneMapped={false} /></mesh>
+                <mesh position={[0, 0, -0.004]}><circleGeometry args={[0.043, 32]} /><meshStandardMaterial color="#05070b" metalness={0.9} roughness={0.1} /></mesh>
+              </group>
+            </group>
+            <group position={[0.19, 0.33, 0]}><G1Arm side={1} reg={reg} /></group>
+            <group position={[-0.19, 0.33, 0]}><G1Arm side={-1} reg={reg} /></group>
+          </group>
         </group>
       </group>
-      {/* limbs (pivot positions are the rig contract) */}
-      <group ref={armL} position={[0.19, 0.4, 0]}><G1Arm side={1} /></group>
-      <group ref={armR} position={[-0.19, 0.4, 0]}><G1Arm side={-1} /></group>
-      <group ref={legL} position={[0.08, -0.07, 0]}><G1Leg /></group>
-      <group ref={legR} position={[-0.08, -0.07, 0]}><G1Leg /></group>
+      <group position={[0.08, -0.07, 0]}><G1Leg side={1} reg={reg} /></group>
+      <group position={[-0.08, -0.07, 0]}><G1Leg side={-1} reg={reg} /></group>
     </group>
   )
 }
@@ -933,8 +1021,12 @@ export const MODELS: RobotModel[] = [
     desc: 'Unitree H1 이족 휴머노이드. Isaac Lab `H1_CFG`. 궤적(joint_state[19])으로 보행 구동.',
     target: [0, 0.95, 0], camera: [1.8, 1.4, 2.4], Component: H1Model },
 
-  { id: 'g1', name: 'Unitree G1', category: 'Humanoid', dof: 23, dataDriven: true, dataset: 'g1_v1',
-    desc: 'Unitree G1 소형 휴머노이드. Isaac Lab `G1_CFG`. 궤적(joint_state[23])으로 보행 구동.',
+  { id: 'g1', name: 'Unitree G1', category: 'Humanoid', dof: 29, dataDriven: true, dataset: 'g1_dance',
+    motions: [
+      { id: 'dance', label: '댄스', dataset: 'g1_dance', frames: 600 },
+      { id: 'walk', label: '보행', dataset: 'g1_v1' },
+    ],
+    desc: 'Unitree G1 소형 휴머노이드(29-DOF). 댄스: 직접 안무한 29관절 + 루트 모션(g1_dance, 30fps) · 보행: Isaac Lab `G1_CFG` 궤적(g1_v1).',
     target: [0, 0.95, 0], camera: [1.8, 1.4, 2.4], Component: G1Model },
 
   { id: 'crazyflie', name: 'Crazyflie Quadcopter', category: 'Aerial', dof: 4, dataDriven: true, dataset: 'crazyflie_v1',
