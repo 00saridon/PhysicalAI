@@ -12,7 +12,7 @@ vi.mock('../api/sse', () => ({
   }),
 }))
 
-import { useSSELogs } from '../hooks/useSSELogs'
+import { useSSELogs, RESUBSCRIBE_MS } from '../hooks/useSSELogs'
 
 beforeEach(() => {
   captured = null
@@ -51,6 +51,27 @@ describe('useSSELogs', () => {
     renderHook(() => useSSELogs('/api/logs/stream', onTerminal))
     act(() => { captured!.onMessage({ event: 'done', data: '{}', id: null }) })
     expect(onTerminal).toHaveBeenCalledTimes(1)
+  })
+
+  it('resubscribes after a stage ends so later stages keep streaming', async () => {
+    vi.useFakeTimers()
+    try {
+      const { streamSSE } = await import('../api/sse')
+      const calls = vi.mocked(streamSSE).mock.calls.length
+      const { result } = renderHook(() => useSSELogs('/api/logs/stream'))
+      expect(vi.mocked(streamSSE).mock.calls.length).toBe(calls + 1)
+      // server sends ENV's done and closes the per-stage stream
+      act(() => { captured!.onMessage({ event: 'done', data: '{"stage":"env","exit_code":0}', id: null }) })
+      act(() => { captured!.onClose?.(false) })
+      expect(result.current.connected).toBe(false)
+      act(() => { vi.advanceTimersByTime(RESUBSCRIBE_MS) })
+      expect(vi.mocked(streamSSE).mock.calls.length).toBe(calls + 2)
+      expect(result.current.connected).toBe(true)
+      sendLog('[COLLECT] episode 1', '9')       // next stage's logs arrive on the new stream
+      expect(result.current.lines.map(l => l.text)).toEqual(['[COLLECT] episode 1'])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('keeps max 200 lines', () => {

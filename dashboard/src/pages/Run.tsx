@@ -59,11 +59,18 @@ export function Run() {
   // 큐의 다음 스테이지를 자동으로 시작합니다(에러/중지 시 중단).
   const [autoRun, setAutoRun] = useState(false)
   const queueRef = useRef<StageId[]>([])
+  // Outcome of each stage this session, from the server's terminal SSE events
+  // (drives the ✓/✕ markers and the "n/5 완료" progress).
+  const [results, setResults] = useState<Partial<Record<StageId, 'done' | 'error'>>>({})
 
-  const runOne = (id: StageId) => runStage({ stage: id, validate: id === 'env' })
+  const runOne = (id: StageId) => {
+    setResults(r => { const { [id]: _, ...rest } = r; return rest })
+    runStage({ stage: id, validate: id === 'env' })
+  }
 
   const startFullRun = () => {
     reset()
+    setResults({})
     queueRef.current = FULL_ORDER.slice(1)  // env 다음부터 큐에 적재
     setAutoRun(true)
     runOne('env')
@@ -80,6 +87,11 @@ export function Run() {
   // full run is in progress, advance the queue (or abort on error/stop).
   const { lines, connected } = useSSELogs(`${apiBase}/logs/stream`, (info) => {
     qc.invalidateQueries({ queryKey: ['pipeline-status'] })
+    const id = info.stage as StageId | null
+    if (id && !info.stopped) {
+      const ok = info.event === 'done' && info.exit_code === 0
+      setResults(r => ({ ...r, [id]: ok ? 'done' : 'error' }))
+    }
     if (!autoRun) return
     if (info.event === 'error' || info.stopped) {
       queueRef.current = []
@@ -113,7 +125,7 @@ export function Run() {
 
   const stages: Stage[] = STAGE_DEFS.map(def => ({
     ...def,
-    status: status?.stage === def.id ? 'running' : 'pending',
+    status: status?.stage === def.id ? 'running' : results[def.id] ?? 'pending',
     detail: '',
   }))
 
@@ -188,7 +200,7 @@ export function Run() {
       {/* 파이프라인 실행 바 */}
       <PipelineBar
         stages={stages}
-        onRun={id => runStage({ stage: id, validate: id === 'env' })}
+        onRun={runOne}
         disabled={status?.running || isPending || autoRun}
       />
 

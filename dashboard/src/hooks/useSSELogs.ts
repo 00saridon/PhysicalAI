@@ -4,6 +4,7 @@ import { parseLogLevel } from '../types/pipeline'
 import { streamSSE } from '../api/sse'
 
 const MAX_LINES = 200
+export const RESUBSCRIBE_MS = 300
 
 /** Payload of a terminal pipeline event (a stage finishing, failing, or being
  *  stopped). Lets a caller chain stages (run the next one) or abort a sequence. */
@@ -67,10 +68,12 @@ export function useSSELogs(
         onClose: (reconnect) => {
           if (!active) return
           setConnected(false)
-          if (reconnect) {
-            timer = setTimeout(connect, Math.min(retry, 4000))
-            retry = Math.min(retry * 2, 4000)
-          }
+          // reconnect=false: the server ended this stream after a stage's
+          // done/error. Streams are per stage, so resubscribe right away to keep
+          // following later stages (done/error aren't replayed on resubscribe).
+          // reconnect=true: transport dropped → back off.
+          timer = setTimeout(connect, reconnect ? Math.min(retry, 4000) : RESUBSCRIBE_MS)
+          if (reconnect) retry = Math.min(retry * 2, 4000)
         },
       })
     }

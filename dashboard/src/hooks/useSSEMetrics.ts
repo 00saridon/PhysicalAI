@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { MetricPoint } from '../types/pipeline'
 import { streamSSE } from '../api/sse'
+import { RESUBSCRIBE_MS } from './useSSELogs'
 
 const MAX_POINTS = 500
 
@@ -41,10 +42,12 @@ export function useSSEMetrics(url: string): { points: MetricPoint[]; connected: 
         onClose: (reconnect) => {
           if (!active) return
           setConnected(false)
-          if (reconnect) {
-            timer = setTimeout(connect, Math.min(retry, 4000))
-            retry = Math.min(retry * 2, 4000)
-          }
+          // reconnect=false: the server ended this stream after a stage's
+          // done/error. Streams are per stage, so resubscribe right away to keep
+          // following later stages (done/error aren't replayed on resubscribe).
+          // reconnect=true: transport dropped → back off.
+          timer = setTimeout(connect, reconnect ? Math.min(retry, 4000) : RESUBSCRIBE_MS)
+          if (reconnect) retry = Math.min(retry * 2, 4000)
         },
       })
     }
