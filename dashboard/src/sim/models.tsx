@@ -23,11 +23,6 @@ import * as THREE from 'three'
 const NV = '#76b900'
 export const JOINT_COLORS = ['#76b900', '#00d4ff', '#a855f7', '#f59e0b', '#ef4444', '#10b981', '#f97316']
 
-const HOUSING = { color: '#222a35', metalness: 0.9, roughness: 0.28 }
-const DARK = { color: '#11161f', metalness: 0.7, roughness: 0.4 }
-const mat = (color: string, metalness = 0.6, roughness = 0.4) => ({ color, metalness, roughness })
-const accentMat = (c: string) => ({ color: c, emissive: c, emissiveIntensity: 0.45, metalness: 0.4, roughness: 0.4 })
-
 export interface ModelProps {
   joints: number[]
   phase: number
@@ -194,8 +189,6 @@ const ArmModel: React.FC<ModelProps> = ({ joints, eeRef, showLabels, playing }) 
     </group>
   )
 }
-
-interface RigOpts { body: string; accent: string }
 
 /* ── Quadruped rig (shared by ANYmal / Spot) ──
  *  joint_state contract: joints[0..3] = hip (HFE), joints[4..7] = knee (KFE),
@@ -808,42 +801,118 @@ const G1Model: React.FC<ModelProps> = (props) => {
   )
 }
 
-/* ── Quadcopter factory (Crazyflie style) ── */
-function makeQuadcopter({ body, accent }: RigOpts): React.FC<ModelProps> {
-  return function Quadcopter({ joints, playing, speed, dataDriven }) {
-    const jref = useRef<number[]>([]); jref.current = joints
-    const rotors = useRef<(THREE.Group | null)[]>([])
-    const root = useRef<THREE.Group>(null!)
-    const t = useRef(0)
-    const arms: [number, number][] = [[0.26, 0.26], [0.26, -0.26], [-0.26, 0.26], [-0.26, -0.26]]
-    useFrame((_, dt) => {
-      rotors.current.forEach((g, i) => g && (g.rotation.y += (playing ? 1 : 0) * (i % 2 ? -1 : 1) * dt * speed * 40))
-      if (dataDriven) {
-        const j = jref.current
-        if (root.current) { root.current.rotation.x = j[0] ?? 0; root.current.rotation.z = j[1] ?? 0 }
-      } else {
-        if (playing) t.current += dt * speed
-        if (root.current) { root.current.position.y = 1.0 + Math.sin(t.current * 1.5) * 0.05; root.current.rotation.z = Math.sin(t.current) * 0.04 }
-      }
-    })
-    return (
-      <group ref={root} position={[0, 1.0, 0]}>
-        <mesh castShadow><boxGeometry args={[0.2, 0.07, 0.2]} /><meshStandardMaterial {...mat(body, 0.8, 0.3)} /></mesh>
-        <mesh position={[0, 0.045, 0]}><boxGeometry args={[0.12, 0.02, 0.12]} /><meshStandardMaterial {...accentMat(accent)} /></mesh>
-        {arms.map(([x, z], i) => (
-          <group key={i}>
-            <mesh position={[x / 2, 0, z / 2]} rotation={[0, -Math.atan2(z, x), 0]} castShadow><boxGeometry args={[Math.hypot(x, z), 0.025, 0.03]} /><meshStandardMaterial {...DARK} /></mesh>
-            <mesh position={[x, -0.01, z]} castShadow><cylinderGeometry args={[0.04, 0.04, 0.05, 12]} /><meshStandardMaterial {...HOUSING} /></mesh>
-            <group ref={el => (rotors.current[i] = el)} position={[x, 0.03, z]}>
-              <mesh><boxGeometry args={[0.34, 0.006, 0.03]} /><meshStandardMaterial color="#cfd6df" metalness={0.3} roughness={0.5} transparent opacity={0.55} /></mesh>
-              <mesh rotation={[0, Math.PI / 2, 0]}><boxGeometry args={[0.34, 0.006, 0.03]} /><meshStandardMaterial color="#cfd6df" metalness={0.3} roughness={0.5} transparent opacity={0.55} /></mesh>
-            </group>
+/* ── Crazyflie 2.x nano quadcopter: the PCB is the frame (black board with
+ *  expansion-deck pin headers and gold pads), translucent motor-mount arms,
+ *  silver coreless motors with legs, two-blade props, LiPo battery underneath
+ *  and status LEDs (front red/green, rear blue). Front = +x.
+ *  joint_state contract: joints[0] = roll (about x), joints[1] = pitch
+ *  (about z); without data it hovers. ── */
+const CF_ARMS: [number, number][] = [[0.26, 0.26], [0.26, -0.26], [-0.26, 0.26], [-0.26, -0.26]]
+const CF_PCB = { color: '#16181c', metalness: 0.2, roughness: 0.55 }
+const CF_GOLD = { color: '#c9a24a', metalness: 0.9, roughness: 0.3 }
+const CF_MOUNT = { color: '#e8ecef', metalness: 0.0, roughness: 0.35, transparent: true, opacity: 0.82 }
+const CF_MOTOR = { color: '#b9bec5', metalness: 0.9, roughness: 0.25 }
+const CF_PROP = { color: '#2a2d33', metalness: 0.1, roughness: 0.5, transparent: true, opacity: 0.9 }
+const CF_LED = ['#ef4444', '#22c55e', '#3b82f6', '#3b82f6']   // front-left, front-right, rear, rear
+
+function Prop() {
+  // two tapered, slightly pitched blades around a hub
+  return (
+    <group>
+      <mesh><cylinderGeometry args={[0.012, 0.012, 0.012, 16]} /><meshStandardMaterial {...CF_PROP} /></mesh>
+      {[0, Math.PI].map(a => (
+        <group key={a} rotation={[0, a, 0]}>
+          <mesh position={[0.085, 0, 0]} rotation={[0.22, 0, 0]} scale={[0.085, 0.004, 0.022]}>
+            <sphereGeometry args={[1, 20, 8]} /><meshStandardMaterial {...CF_PROP} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  )
+}
+
+const CrazyflieModel: React.FC<ModelProps> = ({ joints, playing, speed, dataDriven }) => {
+  const jref = useRef<number[]>([]); jref.current = joints
+  const rotors = useRef<(THREE.Group | null)[]>([])
+  const blur = useRef<(THREE.Mesh | null)[]>([])
+  const root = useRef<THREE.Group>(null!)
+  const t = useRef(0)
+  useFrame((_, dt) => {
+    // diagonal motor pairs spin the same way (M1/M3 vs M2/M4)
+    rotors.current.forEach((g, i) => g && (g.rotation.y += (playing ? 1 : 0) * (i === 0 || i === 3 ? 1 : -1) * dt * speed * 40))
+    blur.current.forEach(m => m && (m.visible = playing))
+    if (dataDriven) {
+      const j = jref.current
+      if (root.current) { root.current.rotation.x = j[0] ?? 0; root.current.rotation.z = j[1] ?? 0 }
+    } else {
+      if (playing) t.current += dt * speed
+      if (root.current) { root.current.position.y = 1.0 + Math.sin(t.current * 1.5) * 0.05; root.current.rotation.z = Math.sin(t.current) * 0.04 }
+    }
+  })
+  const pins = Array.from({ length: 10 }, (_, k) => -0.0675 + k * 0.015)
+  return (
+    <group ref={root} position={[0, 1.0, 0]}>
+      {/* board stack (PCB, chips, headers, battery), sized to the real ~1:2 board/motor-span ratio */}
+      <group scale={1.3}>
+        {/* PCB frame */}
+        <RoundedBox args={[0.22, 0.012, 0.2]} radius={0.005} smoothness={2} castShadow receiveShadow>
+          <meshStandardMaterial {...CF_PCB} />
+        </RoundedBox>
+        {/* silkscreen outline + gold pads */}
+        <mesh position={[0, 0.0065, 0]} rotation={[-Math.PI / 2, 0, 0]}><ringGeometry args={[0.045, 0.048, 4, 1]} /><meshBasicMaterial color="#e5e7eb" /></mesh>
+        {[[0.07, 0.03], [0.07, -0.03], [-0.07, 0.03], [-0.07, -0.03], [0.02, 0.0]].map(([x, z]) => (
+          <mesh key={`${x}${z}`} position={[x, 0.0065, z]}><boxGeometry args={[0.012, 0.002, 0.008]} /><meshStandardMaterial {...CF_GOLD} /></mesh>
+        ))}
+        {/* MCU + radio chips */}
+        <mesh position={[0, 0.009, 0]}><boxGeometry args={[0.035, 0.006, 0.035]} /><meshStandardMaterial color="#0b0c0e" roughness={0.4} /></mesh>
+        <mesh position={[-0.045, 0.008, 0.01]}><boxGeometry args={[0.02, 0.004, 0.02]} /><meshStandardMaterial color="#0b0c0e" roughness={0.4} /></mesh>
+        {/* expansion-deck pin headers (two rows along the sides) */}
+        {[0.085, -0.085].map(z => (
+          <group key={z} position={[0, 0.006, z]}>
+            <mesh position={[0, 0.008, 0]} castShadow><boxGeometry args={[0.155, 0.014, 0.014]} /><meshStandardMaterial color="#0d0e10" roughness={0.6} /></mesh>
+            {pins.map(x => (
+              <mesh key={x} position={[x, 0.02, 0]}><boxGeometry args={[0.003, 0.012, 0.003]} /><meshStandardMaterial {...CF_GOLD} /></mesh>
+            ))}
           </group>
         ))}
-        {arms.map(([x, z], i) => <mesh key={`l${i}`} position={[x * 0.6, -0.12, z * 0.6]} castShadow><cylinderGeometry args={[0.008, 0.008, 0.16, 8]} /><meshStandardMaterial {...DARK} /></mesh>)}
+        {/* LiPo battery in its holder underneath */}
+        <RoundedBox args={[0.13, 0.03, 0.075]} radius={0.008} smoothness={2} position={[0, -0.023, 0]} castShadow>
+          <meshStandardMaterial color="#8e98a6" metalness={0.6} roughness={0.35} />
+        </RoundedBox>
+        <mesh position={[0, -0.023, 0.038]}><boxGeometry args={[0.09, 0.016, 0.002]} /><meshStandardMaterial color="#1e3a8a" roughness={0.6} /></mesh>
       </group>
-    )
-  }
+      {CF_ARMS.map(([x, z], i) => {
+        const yaw = -Math.atan2(z, x)
+        const len = Math.hypot(x, z) - 0.1
+        return (
+          <group key={i}>
+            {/* motor-mount arm from the PCB corner */}
+            <mesh position={[x * 0.62, 0, z * 0.62]} rotation={[0, yaw, 0]} castShadow>
+              <boxGeometry args={[len, 0.014, 0.022]} /><meshStandardMaterial {...CF_MOUNT} />
+            </mesh>
+            <group position={[x, 0, z]}>
+              {/* mount collar, coreless motor, shaft, landing leg */}
+              <mesh castShadow><cylinderGeometry args={[0.03, 0.03, 0.03, 20]} /><meshStandardMaterial {...CF_MOUNT} /></mesh>
+              <mesh position={[0, 0.01, 0]} castShadow><cylinderGeometry args={[0.022, 0.022, 0.05, 20]} /><meshStandardMaterial {...CF_MOTOR} /></mesh>
+              <mesh position={[0, 0.042, 0]}><cylinderGeometry args={[0.003, 0.003, 0.016, 8]} /><meshStandardMaterial {...CF_MOTOR} /></mesh>
+              <mesh position={[0, -0.05, 0]} castShadow><cylinderGeometry args={[0.006, 0.004, 0.08, 10]} /><meshStandardMaterial {...CF_MOUNT} /></mesh>
+              {/* status LED on the arm */}
+              <mesh position={[-x * 0.12, 0.009, -z * 0.12]}>
+                <sphereGeometry args={[0.007, 10, 10]} />
+                <meshStandardMaterial color={CF_LED[i]} emissive={CF_LED[i]} emissiveIntensity={2} toneMapped={false} />
+              </mesh>
+              <group ref={el => (rotors.current[i] = el)} position={[0, 0.052, 0]}><Prop /></group>
+              {/* faint motion-blur disc while spinning */}
+              <mesh ref={el => (blur.current[i] = el)} position={[0, 0.052, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                <circleGeometry args={[0.17, 40]} />
+                <meshBasicMaterial color="#9aa3ad" transparent opacity={0.08} depthWrite={false} side={THREE.DoubleSide} />
+              </mesh>
+            </group>
+          </group>
+        )
+      })}
+    </group>
+  )
 }
 
 /* ── Model registry — add robots here ── */
@@ -870,7 +939,7 @@ export const MODELS: RobotModel[] = [
 
   { id: 'crazyflie', name: 'Crazyflie Quadcopter', category: 'Aerial', dof: 4, dataDriven: true, dataset: 'crazyflie_v1',
     desc: 'Bitcraze Crazyflie 드론. Isaac Lab `CRAZYFLIE_CFG`. 궤적(joint_state[4])으로 자세 + 로터 회전.',
-    target: [0, 1.0, 0], camera: [1.4, 1.3, 1.7], Component: makeQuadcopter({ body: '#222a35', accent: NV }) },
+    target: [0, 1.0, 0], camera: [1.05, 1.75, 1.35], Component: CrazyflieModel },
 ]
 
 export const MODEL_ICON: Record<string, string> = { arm: '🦾', anymal: '🐾', spot: '🐕', h1: '🧍', g1: '🤖', crazyflie: '🚁' }
