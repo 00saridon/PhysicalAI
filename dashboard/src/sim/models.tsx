@@ -17,7 +17,7 @@
  * ─────────────────────────────────────────────────────────────────────── */
 import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { Trail, Html } from '@react-three/drei'
+import { Trail, Html, RoundedBox } from '@react-three/drei'
 import * as THREE from 'three'
 
 const NV = '#76b900'
@@ -56,7 +56,7 @@ export interface RobotModel {
 function JointLabel({ text, color, show }: { text: string; color: string; show?: boolean }) {
   if (!show) return null
   return (
-    <Html position={[0.14, 0, 0]} center distanceFactor={7} style={{ pointerEvents: 'none' }} zIndexRange={[10, 0]}>
+    <Html position={[0.2, 0, 0]} center distanceFactor={7} style={{ pointerEvents: 'none' }} zIndexRange={[10, 0]}>
       <div className="text-[10px] font-black px-1 rounded leading-none py-0.5" style={{ color: '#04060a', background: color }}>{text}</div>
     </Html>
   )
@@ -78,56 +78,123 @@ export function EETracker({ targetRef, onPos }: {
   return null
 }
 
-/* ── 7-DOF manipulator arm (driven by the real joint_state trajectory) ── */
+/* ── 7-DOF manipulator arm (driven by the real joint_state trajectory) ──
+ *  Styled after the Franka Research 3: satin-white rounded covers, dark-grey
+ *  joint caps, offset elbow, a white Hand with dark fingers and a status light
+ *  ring on the base. The joint contract (AXES/GAIN/LINK_LEN) is unchanged. */
 const LINK_LEN = [0.55, 0.6, 0.5, 0.45, 0.4, 0.32, 0.26]
 const AXES: ('x' | 'y' | 'z')[] = ['y', 'z', 'y', 'z', 'y', 'z', 'y']
 const GAIN = 1.4
+const LINK_R = [0.1, 0.095, 0.088, 0.082, 0.075, 0.068, 0.06]   // cover radius per link
+const ELBOW_X = [0, 0, 0.1, -0.1, 0, 0.09, 0]                   // Panda-style lateral offsets
 
-function Knuckle({ axis }: { axis: 'x' | 'y' | 'z' }) {
-  const rot: [number, number, number] = axis === 'y' ? [0, 0, 0] : axis === 'x' ? [0, 0, Math.PI / 2] : [Math.PI / 2, 0, 0]
+const FR_WHITE = { color: '#f3f4f6', metalness: 0.04, roughness: 0.42, clearcoat: 0.35, clearcoatRoughness: 0.35 }
+const FR_GREY = { color: '#2b2f36', metalness: 0.2, roughness: 0.55 }
+const FR_SEAM = { color: '#121418', metalness: 0.1, roughness: 0.7 }
+
+function FrankaJoint({ axis, r }: { axis: 'x' | 'y' | 'z'; r: number }) {
+  // Hinge joints (z) read as a sideways drum with dark caps — the Franka signature.
+  // Roll joints (y) read as a collar with a thin dark seam.
+  if (axis === 'y') {
+    return (
+      <group>
+        <mesh castShadow receiveShadow><cylinderGeometry args={[r * 1.12, r * 1.12, r * 1.6, 40]} /><meshPhysicalMaterial {...FR_WHITE} /></mesh>
+        <mesh><cylinderGeometry args={[r * 1.135, r * 1.135, r * 0.12, 40]} /><meshStandardMaterial {...FR_SEAM} /></mesh>
+      </group>
+    )
+  }
+  const rot: [number, number, number] = axis === 'x' ? [0, 0, Math.PI / 2] : [Math.PI / 2, 0, 0]
+  const w = r * 2.3
   return (
     <group rotation={rot}>
-      <mesh castShadow receiveShadow><cylinderGeometry args={[0.095, 0.095, 0.17, 28]} /><meshStandardMaterial {...HOUSING} /></mesh>
-      <mesh castShadow><cylinderGeometry args={[0.1, 0.1, 0.04, 28]} /><meshStandardMaterial {...accentMat(NV)} /></mesh>
+      <mesh castShadow receiveShadow><cylinderGeometry args={[r * 1.18, r * 1.18, w, 40]} /><meshPhysicalMaterial {...FR_WHITE} /></mesh>
+      {[1, -1].map(s => (
+        <group key={s} position={[0, (s * w) / 2, 0]}>
+          <mesh castShadow><cylinderGeometry args={[r * 1.05, r * 1.05, 0.02, 40]} /><meshStandardMaterial {...FR_GREY} /></mesh>
+          <mesh position={[0, s * 0.011, 0]}><cylinderGeometry args={[r * 0.45, r * 0.45, 0.004, 32]} /><meshStandardMaterial {...FR_SEAM} /></mesh>
+        </group>
+      ))}
+    </group>
+  )
+}
+
+function FrankaHand({ eeRef, showLabels }: { eeRef?: React.RefObject<THREE.Mesh>; showLabels?: boolean }) {
+  return (
+    <group>
+      {/* flange + pilot ring */}
+      <mesh castShadow><cylinderGeometry args={[0.065, 0.065, 0.04, 32]} /><meshStandardMaterial {...FR_GREY} /></mesh>
+      <mesh position={[0, 0.022, 0]}><torusGeometry args={[0.062, 0.006, 10, 40]} /><meshStandardMaterial color="#9ca3af" metalness={0.6} roughness={0.3} /></mesh>
+      {/* hand body */}
+      <RoundedBox args={[0.24, 0.1, 0.1]} radius={0.035} smoothness={4} position={[0, 0.08, 0]} castShadow receiveShadow>
+        <meshPhysicalMaterial {...FR_WHITE} />
+      </RoundedBox>
+      <mesh position={[0, 0.131, 0]}><boxGeometry args={[0.17, 0.004, 0.06]} /><meshStandardMaterial {...FR_SEAM} /></mesh>
+      {/* fingers with grip pads */}
+      {[1, -1].map(s => (
+        <group key={s} position={[s * 0.04, 0.19, 0]}>
+          <RoundedBox args={[0.026, 0.11, 0.045]} radius={0.008} smoothness={3} castShadow><meshStandardMaterial {...FR_GREY} /></RoundedBox>
+          <mesh position={[-s * 0.0135, 0.025, 0]}><boxGeometry args={[0.003, 0.05, 0.036]} /><meshStandardMaterial color="#4b5563" roughness={0.9} /></mesh>
+        </group>
+      ))}
+      <Trail width={2.2} length={5} color={'#a3e635'} attenuation={(t) => t * t} decay={1.2}>
+        <mesh ref={eeRef} position={[0, 0.235, 0]}><sphereGeometry args={[0.022, 14, 14]} /><meshBasicMaterial color="#c4f06b" /></mesh>
+      </Trail>
+      <group position={[0, 0.25, 0]}><JointLabel text="EE" color="#c4f06b" show={showLabels} /></group>
     </group>
   )
 }
 
 function ArmChain({ angles, eeRef, showLabels, i = 0 }: { angles: number[]; eeRef?: React.RefObject<THREE.Mesh>; showLabels?: boolean; i?: number }) {
-  if (i >= LINK_LEN.length) {
-    return (
-      <group>
-        <mesh castShadow><cylinderGeometry args={[0.07, 0.07, 0.05, 24]} /><meshStandardMaterial {...HOUSING} /></mesh>
-        <mesh position={[0.055, 0.13, 0]} rotation={[0, 0, -0.12]} castShadow><boxGeometry args={[0.022, 0.13, 0.06]} /><meshStandardMaterial color="#cfd6df" metalness={0.7} roughness={0.3} /></mesh>
-        <mesh position={[-0.055, 0.13, 0]} rotation={[0, 0, 0.12]} castShadow><boxGeometry args={[0.022, 0.13, 0.06]} /><meshStandardMaterial color="#cfd6df" metalness={0.7} roughness={0.3} /></mesh>
-        <Trail width={2.2} length={5} color={'#a3e635'} attenuation={(t) => t * t} decay={1.2}>
-          <mesh ref={eeRef} position={[0, 0.185, 0]}><sphereGeometry args={[0.03, 14, 14]} /><meshBasicMaterial color="#c4f06b" /></mesh>
-        </Trail>
-        <group position={[0, 0.2, 0]}><JointLabel text="EE" color="#c4f06b" show={showLabels} /></group>
-      </group>
-    )
-  }
+  if (i >= LINK_LEN.length) return <FrankaHand eeRef={eeRef} showLabels={showLabels} />
   const a = (angles[i] ?? 0) * GAIN
   const rot: [number, number, number] = AXES[i] === 'x' ? [a, 0, 0] : AXES[i] === 'y' ? [0, a, 0] : [0, 0, a]
   const len = LINK_LEN[i]
+  const r = LINK_R[i]
+  const off = ELBOW_X[i]
   return (
     <group rotation={rot}>
-      <Knuckle axis={AXES[i]} />
+      <FrankaJoint axis={AXES[i]} r={r} />
       <JointLabel text={`J${i}`} color={JOINT_COLORS[i]} show={showLabels} />
-      <mesh position={[0, len / 2, 0]} castShadow receiveShadow><cylinderGeometry args={[0.052, 0.062, len, 24]} /><meshStandardMaterial {...SHELL} /></mesh>
-      <group position={[0, len, 0]}><ArmChain angles={angles} eeRef={eeRef} showLabels={showLabels} i={i + 1} /></group>
+      {/* rounded link cover */}
+      <mesh position={[0, len / 2, 0]} castShadow receiveShadow>
+        <capsuleGeometry args={[r * 0.95, Math.max(len - r * 1.9, 0.01), 8, 32]} />
+        <meshPhysicalMaterial {...FR_WHITE} />
+      </mesh>
+      {/* lateral elbow offset */}
+      {off !== 0 && (
+        <mesh position={[off / 2, len, 0]} rotation={[0, 0, Math.PI / 2]} castShadow receiveShadow>
+          <capsuleGeometry args={[r * 0.95, Math.abs(off), 8, 32]} />
+          <meshPhysicalMaterial {...FR_WHITE} />
+        </mesh>
+      )}
+      <group position={[off, len, 0]}><ArmChain angles={angles} eeRef={eeRef} showLabels={showLabels} i={i + 1} /></group>
     </group>
   )
 }
 
-const ArmModel: React.FC<ModelProps> = ({ joints, eeRef, showLabels }) => (
-  <group>
-    <mesh position={[0, 0.03, 0]} receiveShadow castShadow><cylinderGeometry args={[0.34, 0.4, 0.06, 40]} /><meshStandardMaterial {...DARK} /></mesh>
-    <mesh position={[0, 0.1, 0]} receiveShadow castShadow><cylinderGeometry args={[0.26, 0.3, 0.1, 40]} /><meshStandardMaterial {...HOUSING} /></mesh>
-    <mesh position={[0, 0.16, 0]} castShadow><cylinderGeometry args={[0.27, 0.27, 0.018, 40]} /><meshStandardMaterial {...accentMat(NV)} /></mesh>
-    <group position={[0, 0.17, 0]}><ArmChain angles={joints} eeRef={eeRef} showLabels={showLabels} /></group>
-  </group>
-)
+const ArmModel: React.FC<ModelProps> = ({ joints, eeRef, showLabels, playing }) => {
+  // Status light: white = idle, green = trajectory playing.
+  const led = playing ? '#4ade80' : '#e5f0ff'
+  return (
+    <group>
+      {/* mounting plate */}
+      <RoundedBox args={[0.62, 0.04, 0.72]} radius={0.015} smoothness={3} position={[0, 0.02, -0.04]} receiveShadow castShadow>
+        <meshStandardMaterial {...FR_GREY} />
+      </RoundedBox>
+      {/* base foot */}
+      <RoundedBox args={[0.46, 0.14, 0.58]} radius={0.06} smoothness={4} position={[0, 0.11, -0.05]} receiveShadow castShadow>
+        <meshPhysicalMaterial {...FR_WHITE} />
+      </RoundedBox>
+      <mesh position={[0, 0.11, -0.345]}><boxGeometry args={[0.16, 0.07, 0.01]} /><meshStandardMaterial {...FR_SEAM} /></mesh>
+      {/* status light ring */}
+      <mesh position={[0, 0.185, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.135, 0.008, 12, 64]} />
+        <meshStandardMaterial color={led} emissive={led} emissiveIntensity={1.2} toneMapped={false} />
+      </mesh>
+      <group position={[0, 0.25, 0]}><ArmChain angles={joints} eeRef={eeRef} showLabels={showLabels} /></group>
+    </group>
+  )
+}
 
 interface RigOpts { body: string; accent: string; eye?: string }
 
@@ -260,7 +327,7 @@ function makeQuadcopter({ body, accent }: RigOpts): React.FC<ModelProps> {
 export const MODELS: RobotModel[] = [
   { id: 'arm', name: 'Franka 7-DOF Arm', category: 'Manipulator', dof: 7, dataDriven: true, dataset: 'synthetic_v1', ee: true,
     desc: '학습된 정책 궤적(joint_state)으로 구동되는 7축 산업용 암 + 그리퍼. Isaac Lab `FRANKA_PANDA_CFG`.',
-    target: [0, 1.15, 0], camera: [2.8, 2.0, 3.2], Component: ArmModel },
+    target: [0, 1.75, 0], camera: [3.9, 2.7, 4.5], Component: ArmModel },
 
   { id: 'anymal', name: 'ANYmal-D', category: 'Quadruped', dof: 12, dataDriven: true, dataset: 'anymal_v1',
     desc: 'ANYbotics 4족 보행 로봇. Isaac Lab `ANYMAL_D_CFG`. 궤적(joint_state[12])으로 보행 구동.',

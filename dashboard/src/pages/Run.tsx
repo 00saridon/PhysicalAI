@@ -12,7 +12,10 @@ import { ResourceBadge } from '../components/ui/ResourceBadge'
 function friendlyError(err: Error): string {
   // TypeError "Failed to fetch" = the request never reached the backend
   // (offline backend, dead tunnel, or CORS), not an HTTP error.
-  if (/failed to fetch|networkerror|load failed/i.test(err.message)) {
+  // A 5xx with an empty body comes from the Vite dev proxy when the backend is
+  // down (ECONNREFUSED) — FastAPI's own errors always carry a body.
+  if (/failed to fetch|networkerror|load failed/i.test(err.message) ||
+      /^5\d\d [^:]*:\s*$/.test(err.message)) {
     return `백엔드에 연결할 수 없습니다 (${getApiRoot() || '기본 백엔드'}). ` +
            `백엔드가 오프라인이거나 주소가 잘못됐습니다 — Resources에서 GPU(기본)로 전환하거나 백엔드를 다시 연결하세요.`
   }
