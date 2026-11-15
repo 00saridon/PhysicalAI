@@ -198,29 +198,141 @@ const ArmModel: React.FC<ModelProps> = ({ joints, eeRef, showLabels, playing }) 
 
 interface RigOpts { body: string; accent: string; eye?: string }
 
-/* ── Quadruped factory (ANYmal / Spot style) ── */
+/* ── Quadruped rig (shared by ANYmal / Spot) ──
+ *  joint_state contract: joints[0..3] = hip (HFE), joints[4..7] = knee (KFE),
+ *  both rotating about z. Without data, a diagonal trot is generated. */
+const QUAD_HIPS: [number, number, number][] = [[0.28, 0, 0.16], [0.28, 0, -0.16], [-0.28, 0, 0.16], [-0.28, 0, -0.16]]
+
+function useQuadrupedRig({ joints, playing, speed, dataDriven }: ModelProps) {
+  const jref = useRef<number[]>([]); jref.current = joints
+  const hips = useRef<(THREE.Group | null)[]>([])
+  const knees = useRef<(THREE.Group | null)[]>([])
+  const root = useRef<THREE.Group>(null!)
+  const t = useRef(0)
+  useFrame((_, dt) => {
+    if (playing) t.current += dt * speed * 4
+    if (dataDriven) {
+      const j = jref.current
+      hips.current.forEach((g, i) => g && (g.rotation.z = (j[i] ?? 0)))
+      knees.current.forEach((g, i) => g && (g.rotation.z = (j[i + 4] ?? 0)))
+    } else {
+      const tt = t.current
+      hips.current.forEach((g, i) => g && (g.rotation.z = Math.sin(tt + (i === 0 || i === 3 ? 0 : Math.PI)) * 0.35))
+      knees.current.forEach((g, i) => g && (g.rotation.z = -0.5 + Math.max(0, Math.sin(tt + (i === 0 || i === 3 ? 0 : Math.PI) + 0.6)) * 0.5))
+      if (root.current) { root.current.position.y = 0.46 + Math.sin(tt * 2) * 0.012; root.current.rotation.z = Math.sin(tt) * 0.02 }
+    }
+  })
+  return { hips, knees, root, t }
+}
+
+/* ── ANYmal-D: red shell over a dark chassis, big grey actuators, pan-tilt
+ *  inspection head (zoom / thermal / spotlight), rear lidar and carry handle. ── */
+const AN_RED = { color: '#d9302a', metalness: 0.1, roughness: 0.42, clearcoat: 0.5, clearcoatRoughness: 0.3 }
+const AN_DARK = { color: '#2d3036', metalness: 0.35, roughness: 0.5 }
+const AN_MID = { color: '#464b53', metalness: 0.3, roughness: 0.45 }
+const AN_BLACK = { color: '#121417', metalness: 0.2, roughness: 0.65 }
+const AN_GLASS = { color: '#0b0d10', metalness: 0.9, roughness: 0.08 }
+
+function Actuator({ r, len, axis }: { r: number; len: number; axis: 'x' | 'z' }) {
+  // Cylindrical drive: dark housing, lighter end cap, bolt circle.
+  const rot: [number, number, number] = axis === 'x' ? [0, 0, Math.PI / 2] : [Math.PI / 2, 0, 0]
+  return (
+    <group rotation={rot}>
+      <mesh castShadow receiveShadow><cylinderGeometry args={[r, r, len, 32]} /><meshStandardMaterial {...AN_DARK} /></mesh>
+      {[1, -1].map(s => (
+        <group key={s} position={[0, (s * len) / 2, 0]}>
+          <mesh><cylinderGeometry args={[r * 0.86, r * 0.86, 0.008, 32]} /><meshStandardMaterial {...AN_MID} /></mesh>
+          <mesh position={[0, s * 0.005, 0]}><torusGeometry args={[r * 0.6, 0.004, 6, 24]} /><meshStandardMaterial {...AN_BLACK} /></mesh>
+        </group>
+      ))}
+    </group>
+  )
+}
+
+const AnymalModel: React.FC<ModelProps> = (props) => {
+  const { hips, knees, root, t } = useQuadrupedRig(props)
+  const head = useRef<THREE.Group>(null!)
+  const lidar = useRef<THREE.Group>(null!)
+  useFrame((_, dt) => {
+    // payload pans slowly; lidar spins while playing
+    if (head.current) head.current.rotation.y = Math.sin(t.current * 0.25) * 0.5
+    if (lidar.current && props.playing) lidar.current.rotation.y += dt * props.speed * 3
+  })
+  return (
+    <group ref={root} position={[0, 0.46, 0]}>
+      {/* red upper shell + dark lower chassis */}
+      <RoundedBox args={[0.6, 0.15, 0.27]} radius={0.045} smoothness={4} position={[0, 0.035, 0]} castShadow receiveShadow>
+        <meshPhysicalMaterial {...AN_RED} />
+      </RoundedBox>
+      <RoundedBox args={[0.64, 0.08, 0.23]} radius={0.03} smoothness={3} position={[0, -0.06, 0]} castShadow receiveShadow>
+        <meshStandardMaterial {...AN_DARK} />
+      </RoundedBox>
+      {[1, -1].map(s => (
+        <mesh key={s} position={[0, -0.02, s * 0.136]}><boxGeometry args={[0.5, 0.012, 0.004]} /><meshStandardMaterial {...AN_BLACK} /></mesh>
+      ))}
+      {/* front & rear sensor bumpers with depth cameras */}
+      {[1, -1].map(s => (
+        <group key={s} position={[s * 0.315, 0.0, 0]}>
+          <RoundedBox args={[0.05, 0.11, 0.19]} radius={0.015} smoothness={3} castShadow><meshStandardMaterial {...AN_DARK} /></RoundedBox>
+          {[0.045, -0.045].map(z => (
+            <mesh key={z} position={[s * 0.027, 0.01, z]} rotation={[0, 0, Math.PI / 2]}>
+              <cylinderGeometry args={[0.018, 0.018, 0.008, 20]} /><meshStandardMaterial {...AN_GLASS} />
+            </mesh>
+          ))}
+        </group>
+      ))}
+      {/* pan-tilt inspection payload */}
+      <group position={[0.2, 0.11, 0]}>
+        <mesh position={[0, 0.03, 0]} castShadow><cylinderGeometry args={[0.03, 0.04, 0.06, 20]} /><meshStandardMaterial {...AN_BLACK} /></mesh>
+        <group ref={head} position={[0, 0.13, 0]}>
+          <RoundedBox args={[0.13, 0.14, 0.17]} radius={0.02} smoothness={3} castShadow><meshStandardMaterial {...AN_MID} /></RoundedBox>
+          <mesh position={[0.066, 0.035, 0.035]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.026, 0.026, 0.006, 24]} /><meshStandardMaterial color="#a8834a" metalness={0.8} roughness={0.25} /></mesh>
+          <mesh position={[0.066, 0.035, -0.035]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.02, 0.02, 0.006, 24]} /><meshStandardMaterial color="#fff6dc" emissive="#fff1c4" emissiveIntensity={0.9} toneMapped={false} /></mesh>
+          {[0.03, -0.03].map(z => (
+            <mesh key={z} position={[0.066, -0.035, z]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.022, 0.022, 0.008, 24]} /><meshStandardMaterial {...AN_GLASS} /></mesh>
+          ))}
+        </group>
+      </group>
+      {/* carry handle */}
+      <mesh position={[-0.02, 0.11, 0]}><torusGeometry args={[0.1, 0.011, 10, 32, Math.PI]} /><meshStandardMaterial {...AN_BLACK} /></mesh>
+      {/* rear lidar */}
+      <group position={[-0.21, 0.11, 0]}>
+        <mesh position={[0, 0.012, 0]} castShadow><cylinderGeometry args={[0.058, 0.058, 0.025, 28]} /><meshStandardMaterial {...AN_BLACK} /></mesh>
+        <group ref={lidar} position={[0, 0.055, 0]}>
+          <mesh><cylinderGeometry args={[0.052, 0.052, 0.06, 28]} /><meshStandardMaterial color="#1d5f7a" metalness={0.9} roughness={0.12} emissive="#0b3a4d" emissiveIntensity={0.4} /></mesh>
+        </group>
+        <mesh position={[0, 0.095, 0]} castShadow><cylinderGeometry args={[0.055, 0.055, 0.02, 28]} /><meshStandardMaterial {...AN_BLACK} /></mesh>
+      </group>
+      {/* legs: HAA drive on the body, HFE drive outboard, thigh, KFE drive, shank, foot */}
+      {QUAD_HIPS.map((p, i) => {
+        const s = Math.sign(p[2])
+        return (
+          <group key={i} position={p}>
+            <group position={[Math.sign(p[0]) * -0.02, 0, 0]}><Actuator r={0.058} len={0.1} axis="x" /></group>
+            <group ref={el => (hips.current[i] = el)} position={[0, 0, s * 0.07]}>
+              <Actuator r={0.062} len={0.075} axis="z" />
+              <RoundedBox args={[0.075, 0.26, 0.055]} radius={0.02} smoothness={3} position={[0, -0.13, 0]} castShadow>
+                <meshStandardMaterial {...AN_DARK} />
+              </RoundedBox>
+              <mesh position={[0, -0.12, s * 0.029]}><boxGeometry args={[0.05, 0.16, 0.004]} /><meshStandardMaterial {...AN_MID} /></mesh>
+              <group ref={el => (knees.current[i] = el)} position={[0, -0.26, 0]}>
+                <Actuator r={0.048} len={0.07} axis="z" />
+                <mesh position={[0, -0.13, 0]} castShadow><cylinderGeometry args={[0.022, 0.018, 0.26, 14]} /><meshStandardMaterial {...AN_BLACK} /></mesh>
+                <mesh position={[0, -0.27, 0]} castShadow><sphereGeometry args={[0.036, 18, 18]} /><meshStandardMaterial color="#1a1c20" roughness={0.9} /></mesh>
+              </group>
+            </group>
+          </group>
+        )
+      })}
+    </group>
+  )
+}
+
+/* ── Generic quadruped (Spot) ── */
 function makeQuadruped({ body, accent, eye = NV }: RigOpts): React.FC<ModelProps> {
-  return function Quadruped({ joints, playing, speed, dataDriven }) {
-    const jref = useRef<number[]>([]); jref.current = joints
-    const hips = useRef<(THREE.Group | null)[]>([])
-    const knees = useRef<(THREE.Group | null)[]>([])
-    const root = useRef<THREE.Group>(null!)
-    const t = useRef(0)
-    const pos: [number, number, number][] = [[0.28, 0, 0.16], [0.28, 0, -0.16], [-0.28, 0, 0.16], [-0.28, 0, -0.16]]
-    useFrame((_, dt) => {
-      if (dataDriven) {
-        // direct joint_state -> rotation: joints[0..3]=hip(HFE), [4..7]=knee(KFE)
-        const j = jref.current
-        hips.current.forEach((g, i) => g && (g.rotation.z = (j[i] ?? 0)))
-        knees.current.forEach((g, i) => g && (g.rotation.z = (j[i + 4] ?? 0)))
-      } else {
-        if (playing) t.current += dt * speed * 4
-        const tt = t.current
-        hips.current.forEach((g, i) => g && (g.rotation.z = Math.sin(tt + (i === 0 || i === 3 ? 0 : Math.PI)) * 0.35))
-        knees.current.forEach((g, i) => g && (g.rotation.z = -0.5 + Math.max(0, Math.sin(tt + (i === 0 || i === 3 ? 0 : Math.PI) + 0.6)) * 0.5))
-        if (root.current) { root.current.position.y = 0.46 + Math.sin(tt * 2) * 0.012; root.current.rotation.z = Math.sin(tt) * 0.02 }
-      }
-    })
+  return function Quadruped(props) {
+    const { hips, knees, root } = useQuadrupedRig(props)
+    const pos = QUAD_HIPS
     return (
       <group ref={root} position={[0, 0.46, 0]}>
         <mesh castShadow receiveShadow><boxGeometry args={[0.66, 0.16, 0.3]} /><meshStandardMaterial {...mat(body, 0.6, 0.4)} /></mesh>
@@ -331,7 +443,7 @@ export const MODELS: RobotModel[] = [
 
   { id: 'anymal', name: 'ANYmal-D', category: 'Quadruped', dof: 12, dataDriven: true, dataset: 'anymal_v1',
     desc: 'ANYbotics 4족 보행 로봇. Isaac Lab `ANYMAL_D_CFG`. 궤적(joint_state[12])으로 보행 구동.',
-    target: [0, 0.4, 0], camera: [1.7, 1.1, 2.0], Component: makeQuadruped({ body: '#2a3340', accent: NV, eye: NV }) },
+    target: [0, 0.42, 0], camera: [1.45, 0.95, 1.7], Component: AnymalModel },
 
   { id: 'spot', name: 'Boston Dynamics Spot', category: 'Quadruped', dof: 12, dataDriven: true, dataset: 'spot_v1',
     desc: 'Boston Dynamics Spot. Isaac Lab `SPOT_CFG`. 궤적(joint_state[12])으로 대각 트로트 보행.',
