@@ -15,7 +15,7 @@
  *  Unreal/Unity: the same joint_state[i] -> DOF mapping is the rig contract —
  *  bind each joint index to the engine's bone/joint and stream the array.
  * ─────────────────────────────────────────────────────────────────────── */
-import { useRef } from 'react'
+import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Trail, Html, RoundedBox } from '@react-three/drei'
 import * as THREE from 'three'
@@ -409,31 +409,200 @@ const SpotModel: React.FC<ModelProps> = (props) => {
   )
 }
 
-/* ── Humanoid biped factory (H1 / G1 style) ── */
+/* ── Humanoid rig (shared by H1 / G1) ──
+ *  joint_state contract: joints[0..1] = left/right hip pitch,
+ *  joints[2..3] = left/right shoulder pitch (rotation about x).
+ *  Without data, a walking gait is generated. */
+function useHumanoidRig({ joints, playing, speed, dataDriven }: ModelProps) {
+  const jref = useRef<number[]>([]); jref.current = joints
+  const legL = useRef<THREE.Group>(null!), legR = useRef<THREE.Group>(null!)
+  const armL = useRef<THREE.Group>(null!), armR = useRef<THREE.Group>(null!)
+  const root = useRef<THREE.Group>(null!)
+  const t = useRef(0)
+  useFrame((_, dt) => {
+    if (dataDriven) {
+      const j = jref.current
+      if (legL.current) legL.current.rotation.x = j[0] ?? 0
+      if (legR.current) legR.current.rotation.x = j[1] ?? 0
+      if (armL.current) armL.current.rotation.x = j[2] ?? 0
+      if (armR.current) armR.current.rotation.x = j[3] ?? 0
+    } else {
+      if (playing) t.current += dt * speed * 3.2
+      const tt = t.current
+      if (legL.current) legL.current.rotation.x = Math.sin(tt) * 0.5
+      if (legR.current) legR.current.rotation.x = Math.sin(tt + Math.PI) * 0.5
+      if (armL.current) armL.current.rotation.x = Math.sin(tt + Math.PI) * 0.45
+      if (armR.current) armR.current.rotation.x = Math.sin(tt) * 0.45
+      if (root.current) root.current.position.y = 0.92 + Math.abs(Math.sin(tt)) * 0.03
+    }
+  })
+  return { legL, legR, armL, armR, root }
+}
+
+/* ── Unitree H1: smooth light-grey torso shell with panel seams, open oval
+ *  head ring with lidar, dark pelvis with large hip drives, long slim dark
+ *  limbs, five-finger hands and wedge-shaped feet. ── */
+const H1_DARK = { color: '#25282d', metalness: 0.3, roughness: 0.5 }
+const H1_BLACK = { color: '#141619', metalness: 0.25, roughness: 0.6 }
+const H1_SHELL = { color: '#c3c7cd', metalness: 0.05, roughness: 0.5, clearcoat: 0.3, clearcoatRoughness: 0.45 }
+
+function Drive({ r, len }: { r: number; len: number }) {
+  // joint drive whose axis is x (the pitch axis of the humanoid rig)
+  return (
+    <group rotation={[0, 0, Math.PI / 2]}>
+      <mesh castShadow><cylinderGeometry args={[r, r, len, 28]} /><meshStandardMaterial {...H1_DARK} /></mesh>
+      {[1, -1].map(s => (
+        <mesh key={s} position={[0, (s * len) / 2, 0]}><cylinderGeometry args={[r * 0.7, r * 0.7, 0.006, 28]} /><meshStandardMaterial {...H1_BLACK} /></mesh>
+      ))}
+    </group>
+  )
+}
+
+function H1Arm({ side }: { side: 1 | -1 }) {
+  return (
+    <group>
+      <Drive r={0.055} len={0.08} />
+      <mesh position={[side * 0.005, -0.17, 0]} castShadow>
+        <capsuleGeometry args={[0.042, 0.24, 6, 20]} /><meshStandardMaterial {...H1_DARK} />
+      </mesh>
+      <group position={[0, -0.34, 0]}>
+        <Drive r={0.04} len={0.07} />
+        <mesh position={[0, -0.14, 0.01]} castShadow>
+          <capsuleGeometry args={[0.034, 0.2, 6, 20]} /><meshStandardMaterial {...H1_DARK} />
+        </mesh>
+        <group position={[0, -0.265, 0.012]} scale={1.4}><H1Hand side={side} /></group>
+      </group>
+    </group>
+  )
+}
+
+function H1Hand({ side }: { side: 1 | -1 }) {
+  // Palm faces the body (-side·x); fingers hang down and curl toward the palm.
+  const curl = -side * 0.55
+  return (
+    <group>
+      <mesh position={[0, -0.005, 0]} castShadow><cylinderGeometry args={[0.026, 0.03, 0.02, 20]} /><meshStandardMaterial {...H1_BLACK} /></mesh>
+      <RoundedBox args={[0.026, 0.06, 0.055]} radius={0.01} smoothness={3} position={[0, -0.045, 0]} castShadow>
+        <meshStandardMaterial {...H1_DARK} />
+      </RoundedBox>
+      {[-0.019, -0.0065, 0.0065, 0.019].map((z, k) => (
+        <group key={z} position={[0, -0.075, z]} rotation={[0, 0, curl * 0.4]}>
+          <mesh position={[0, -0.014, 0]} castShadow><capsuleGeometry args={[0.0058, 0.018, 4, 10]} /><meshStandardMaterial {...H1_BLACK} /></mesh>
+          <group position={[0, -0.03, 0]} rotation={[0, 0, curl]}>
+            <mesh position={[0, -0.011, 0]} castShadow><capsuleGeometry args={[0.0052, k === 0 || k === 3 ? 0.011 : 0.015, 4, 10]} /><meshStandardMaterial {...H1_BLACK} /></mesh>
+          </group>
+        </group>
+      ))}
+      {/* thumb, opposed toward the palm side */}
+      <group position={[-side * 0.008, -0.035, 0.03]} rotation={[0.5, 0, curl * 1.2]}>
+        <mesh position={[0, -0.014, 0]} castShadow><capsuleGeometry args={[0.0065, 0.018, 4, 10]} /><meshStandardMaterial {...H1_BLACK} /></mesh>
+        <group position={[0, -0.03, 0]} rotation={[0, 0, curl * 0.6]}>
+          <mesh position={[0, -0.01, 0]} castShadow><capsuleGeometry args={[0.006, 0.012, 4, 10]} /><meshStandardMaterial {...H1_BLACK} /></mesh>
+        </group>
+      </group>
+    </group>
+  )
+}
+
+function H1Foot() {
+  // Side profile (forward = +z, up = +y): tall at the ankle, tapering to a
+  // thin toe, short rounded heel. Extruded across the foot width (x).
+  const geo = useMemo(() => {
+    const w = 0.07
+    const shape = new THREE.Shape()
+    shape.moveTo(-0.07, 0.006)
+    shape.lineTo(0.15, 0.004)
+    shape.quadraticCurveTo(0.17, 0.006, 0.165, 0.016)
+    shape.quadraticCurveTo(0.07, 0.03, 0.035, 0.075)
+    shape.quadraticCurveTo(0.0, 0.09, -0.045, 0.06)
+    shape.quadraticCurveTo(-0.075, 0.04, -0.07, 0.006)
+    const g = new THREE.ExtrudeGeometry(shape, { depth: w, bevelEnabled: true, bevelSize: 0.006, bevelThickness: 0.006, bevelSegments: 3, curveSegments: 16 })
+    g.translate(0, 0, -w / 2)
+    g.rotateY(-Math.PI / 2)
+    g.computeVertexNormals()
+    return g
+  }, [])
+  return (
+    <group>
+      <mesh geometry={geo} castShadow receiveShadow><meshStandardMaterial {...H1_DARK} /></mesh>
+      {/* rubber sole */}
+      <RoundedBox args={[0.074, 0.008, 0.235]} radius={0.003} smoothness={2} position={[0, 0.002, 0.048]} receiveShadow>
+        <meshStandardMaterial color="#0d0e10" roughness={0.95} />
+      </RoundedBox>
+    </group>
+  )
+}
+
+function H1Leg() {
+  return (
+    <group>
+      <Drive r={0.068} len={0.09} />
+      <mesh position={[0, -0.2, 0]} castShadow><cylinderGeometry args={[0.066, 0.05, 0.34, 24]} /><meshStandardMaterial {...H1_DARK} /></mesh>
+      <group position={[0, -0.4, 0]}>
+        <Drive r={0.05} len={0.08} />
+        <mesh position={[0, -0.2, -0.005]} castShadow><cylinderGeometry args={[0.048, 0.032, 0.34, 24]} /><meshStandardMaterial {...H1_DARK} /></mesh>
+        <group position={[0, -0.385, 0]}><Drive r={0.03} len={0.06} /></group>
+        <group position={[0, -0.445, 0]}><H1Foot /></group>
+      </group>
+    </group>
+  )
+}
+
+// (radius, height) profile of the torso, centred on its mid-height
+const TORSO_PROFILE: [number, number][] = [
+  [0, -0.17], [0.105, -0.17], [0.118, -0.15], [0.128, -0.1], [0.145, -0.03], [0.162, 0.04],
+  [0.17, 0.09], [0.165, 0.13], [0.145, 0.158], [0.1, 0.172], [0.04, 0.178], [0, 0.178],
+]
+const TORSO_SEAMS: [number, number][] = [[-0.06, 0.1395], [-0.135, 0.1205]]
+
+const H1Model: React.FC<ModelProps> = (props) => {
+  const { legL, legR, armL, armR, root } = useHumanoidRig(props)
+  const torsoGeo = useMemo(() => {
+    const pts = new THREE.SplineCurve(TORSO_PROFILE.map(([r, y]) => new THREE.Vector2(r, y))).getPoints(48)
+    return new THREE.LatheGeometry(pts.map(p => new THREE.Vector2(Math.max(p.x, 0), p.y)), 64)
+  }, [])
+  return (
+    <group ref={root} position={[0, 0.92, 0]}>
+      {/* pelvis + hip-yaw drives */}
+      <RoundedBox args={[0.24, 0.09, 0.13]} radius={0.025} smoothness={3} castShadow><meshStandardMaterial {...H1_DARK} /></RoundedBox>
+      {[0.08, -0.08].map(x => (
+        <mesh key={x} position={[x, -0.035, 0]} castShadow><cylinderGeometry args={[0.045, 0.045, 0.05, 24]} /><meshStandardMaterial {...H1_BLACK} /></mesh>
+      ))}
+      {/* waist */}
+      <mesh position={[0, 0.075, 0]} castShadow><cylinderGeometry args={[0.07, 0.08, 0.06, 28]} /><meshStandardMaterial {...H1_BLACK} /></mesh>
+      {/* smooth torso shell: lathed profile (rounded shoulders, full chest,
+          tapered waist), flattened front-to-back, with seam rings */}
+      <group position={[0, 0.27, 0]} scale={[1, 1, 0.62]}>
+        <mesh geometry={torsoGeo} castShadow receiveShadow><meshPhysicalMaterial {...H1_SHELL} /></mesh>
+        {TORSO_SEAMS.map(([y, r]) => (
+          <mesh key={y} position={[0, y, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[r + 0.0005, 0.0022, 6, 64]} /><meshStandardMaterial {...H1_BLACK} />
+          </mesh>
+        ))}
+      </group>
+      {[1, -1].map(s => (
+        <mesh key={s} position={[s * 0.03, 0.33, 0.1]} rotation={[-0.25, 0, s * 0.7]}><boxGeometry args={[0.0035, 0.06, 0.003]} /><meshStandardMaterial {...H1_BLACK} /></mesh>
+      ))}
+      {/* neck + open oval head ring with lidar */}
+      <mesh position={[0, 0.47, 0]} castShadow><cylinderGeometry args={[0.025, 0.035, 0.05, 20]} /><meshStandardMaterial {...H1_BLACK} /></mesh>
+      <group position={[0, 0.58, 0]} scale={[1, 1.35, 1]}>
+        <mesh castShadow><torusGeometry args={[0.065, 0.016, 14, 40]} /><meshStandardMaterial {...H1_BLACK} /></mesh>
+        <mesh position={[0, 0, -0.012]}><circleGeometry args={[0.05, 32]} /><meshStandardMaterial color="#0a0b0d" metalness={0.8} roughness={0.15} side={THREE.DoubleSide} /></mesh>
+      </group>
+      <mesh position={[0, 0.505, 0.012]}><sphereGeometry args={[0.012, 12, 12]} /><meshStandardMaterial color={NV} emissive={NV} emissiveIntensity={1} toneMapped={false} /></mesh>
+      {/* limbs (pivot positions are the rig contract) */}
+      <group ref={armL} position={[0.215, 0.39, 0]}><H1Arm side={1} /></group>
+      <group ref={armR} position={[-0.215, 0.39, 0]}><H1Arm side={-1} /></group>
+      <group ref={legL} position={[0.08, -0.07, 0]}><H1Leg /></group>
+      <group ref={legR} position={[-0.08, -0.07, 0]}><H1Leg /></group>
+    </group>
+  )
+}
+
+/* ── Generic humanoid (G1) ── */
 function makeHumanoid({ body, accent, eye = NV }: RigOpts): React.FC<ModelProps> {
-  return function Humanoid({ joints, playing, speed, dataDriven }) {
-    const jref = useRef<number[]>([]); jref.current = joints
-    const legL = useRef<THREE.Group>(null!), legR = useRef<THREE.Group>(null!)
-    const armL = useRef<THREE.Group>(null!), armR = useRef<THREE.Group>(null!)
-    const root = useRef<THREE.Group>(null!)
-    const t = useRef(0)
-    useFrame((_, dt) => {
-      if (dataDriven) {
-        const j = jref.current
-        if (legL.current) legL.current.rotation.x = j[0] ?? 0
-        if (legR.current) legR.current.rotation.x = j[1] ?? 0
-        if (armL.current) armL.current.rotation.x = j[2] ?? 0
-        if (armR.current) armR.current.rotation.x = j[3] ?? 0
-      } else {
-        if (playing) t.current += dt * speed * 3.2
-        const tt = t.current
-        if (legL.current) legL.current.rotation.x = Math.sin(tt) * 0.5
-        if (legR.current) legR.current.rotation.x = Math.sin(tt + Math.PI) * 0.5
-        if (armL.current) armL.current.rotation.x = Math.sin(tt + Math.PI) * 0.45
-        if (armR.current) armR.current.rotation.x = Math.sin(tt) * 0.45
-        if (root.current) root.current.position.y = 0.92 + Math.abs(Math.sin(tt)) * 0.03
-      }
-    })
+  return function Humanoid(props) {
+    const { legL, legR, armL, armR, root } = useHumanoidRig(props)
     const limb = (len: number, r = 0.05, m: any = SHELL) => <mesh position={[0, -len / 2, 0]} castShadow><cylinderGeometry args={[r, r * 0.85, len, 16]} /><meshStandardMaterial {...m} /></mesh>
     return (
       <group ref={root} position={[0, 0.92, 0]}>
@@ -505,7 +674,7 @@ export const MODELS: RobotModel[] = [
 
   { id: 'h1', name: 'Unitree H1', category: 'Humanoid', dof: 19, dataDriven: true, dataset: 'h1_v1',
     desc: 'Unitree H1 이족 휴머노이드. Isaac Lab `H1_CFG`. 궤적(joint_state[19])으로 보행 구동.',
-    target: [0, 0.9, 0], camera: [1.8, 1.4, 2.2], Component: makeHumanoid({ body: '#e9edf2', accent: NV, eye: NV }) },
+    target: [0, 0.95, 0], camera: [1.8, 1.4, 2.4], Component: H1Model },
 
   { id: 'g1', name: 'Unitree G1', category: 'Humanoid', dof: 23, dataDriven: true, dataset: 'g1_v1',
     desc: 'Unitree G1 소형 휴머노이드. Isaac Lab `G1_CFG`. 궤적(joint_state[23])으로 보행 구동.',
